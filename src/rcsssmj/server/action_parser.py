@@ -2,7 +2,7 @@ import logging
 from abc import ABC, abstractmethod
 from math import radians
 
-from rcsssmj.sim.actions import InitRequest, MotorAction, SimAction
+from rcsssmj.sim.actions import InitRequest, MotorAction, SayAction, SimAction
 from rcsssmj.utils.sexpression import SExpression
 
 logger = logging.getLogger(__name__)
@@ -83,6 +83,10 @@ class DefaultActionParser(ActionParser):
                 node.get_float(4),
                 node.get_float(5),
             )
+
+        if node[0] == b'say' and n_elements > 1:
+            # say action: (say <message>)
+            return SayAction(model_prefix + 'say', node.get_str(1))
 
         logger.debug('Unknown action node: %s', node)
 

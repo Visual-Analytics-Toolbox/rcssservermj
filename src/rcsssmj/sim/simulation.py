@@ -1,7 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
-from typing import Any, Final
+from typing import Any, Dict, Final
 
 import mujoco
 import numpy as np
@@ -25,6 +25,7 @@ from rcsssmj.sim.perceptions import (
     TouchPerception,
     VisionPerception,
 )
+from rcsssmj.sim.communication import CommunicationController, CommunicationInterface
 from rcsssmj.sim.sim_agent import SimAgent
 from rcsssmj.sim.sim_object import SimObject
 from rcsssmj.sim.state_info import SceneGraph, SimStateInformation
@@ -79,6 +80,12 @@ class BaseSimulation(ABC):
 
         self._world_markers: Sequence[tuple[str, str]] = []
         """The sequence of world markers used for generating vision perceptions."""
+
+        self._communication_controller: CommunicationController = CommunicationController()
+        """The communication controller."""
+
+        self._com_interfaces: Dict[str, CommunicationInterface] = {}
+        """A cached mapping of actuator names to their communication interfaces."""
 
     @property
     def frame_id(self) -> int:
@@ -181,6 +188,11 @@ class BaseSimulation(ABC):
             actuator_vel_model.gainprm[0] = kd
             actuator_vel_model.biasprm[2] = -kd
 
+    def say_message(self, actuator_name: str, message: str) -> None:
+        com_interface = self._com_interfaces.get(actuator_name)
+        if com_interface is not None:
+            com_interface.requested_broadcast = message
+
     def init(self) -> bool:
         """Initialize the game and create a new simulation world environment."""
 
@@ -256,6 +268,10 @@ class BaseSimulation(ABC):
         frame = self._mj_spec.worldbody.add_frame()
         frame.attach_body(robot_spec.body('torso'), sim_agent.agent_id.prefix, '')
 
+        com_interface_site = next((site for site in robot_spec.sites if site.name.endswith('-communication_interface')), None)
+        if com_interface_site is not None:
+            sim_agent.sim_atoms[com_interface_site.name] = (CommunicationInterface(com_interface_site.name))
+
         logger.info('Player %s #%d joined the game.', params.team_name, params.player_no)
 
         return sim_agent
@@ -324,6 +340,17 @@ class BaseSimulation(ABC):
         for obj in self.sim_objects:
             obj.bind(self._mj_model, self._mj_data)
 
+        # update cached communication interfaces
+        self._com_interfaces.clear()
+        for agent in self.sim_agents:
+            for atom in agent.sim_atoms.values():
+                if isinstance(atom, CommunicationInterface):
+                    self._com_interfaces[agent.agent_id.prefix+'say'] = atom
+                    break
+
+        # update communication controller
+        self._communication_controller.update_com_interfaces(list(self.sim_agents))
+
     def step(self, agent_actions: Sequence[SimAction], monitor_commands: Sequence[MonitorCommand]) -> None:
         """Perform a simulation step.
 
@@ -364,6 +391,9 @@ class BaseSimulation(ABC):
         # apply agent actions
         for action in agent_actions:
             action.perform(self)
+
+        # update communication controller
+        self._communication_controller.update(self.timestep, list(self.sim_agents))
 
     def _post_step(self, monitor_commands: Sequence[MonitorCommand]) -> None:
         """Method executed right after a simulation step.
@@ -467,7 +497,7 @@ class BaseSimulation(ABC):
                     px, py, pz = trunc3_vec(sensor.data[0:3])
                     agent_perceptions.append(PositionPerception(sensor_name, px, py, pz))
 
-                # TODO: Add perceptions for force and hear
+                # TODO: Add perceptions for force
 
                 else:
                     # sensor not supported...
@@ -517,6 +547,9 @@ class BaseSimulation(ABC):
                         idx += n_player_markers
 
                     agent_perceptions.append(VisionPerception('See', obj_detections))
+
+            for sim_atom in agent.sim_atoms.values():
+                sim_atom.generate_perceptions(agent_perceptions)
 
             # forward generated perceptions to agent instance
             agent.set_perceptions(agent_perceptions)

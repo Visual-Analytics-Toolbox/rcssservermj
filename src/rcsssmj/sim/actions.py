@@ -114,3 +114,27 @@ class MotorAction(SimAction):
 
     def perform(self, ai: PSimActionInterface) -> None:
         ai.ctrl_motor(self.actuator_name, self.q, self.dq, self.kp, self.kd, self.tau)
+
+
+class SayAction(SimAction):
+    """Class for representing a say action."""
+
+    def __init__(self, actuator_name: str, message: str):
+        """Construct a new say action.
+
+        Parameter
+        ---------
+        actuator_name: str
+            The name of the beam effector.
+
+        message: str
+            The message to say.
+        """
+
+        super().__init__(actuator_name)
+
+        self.message: Final[str] = message
+        """The message to say."""
+
+    def perform(self, ai: PSimActionInterface) -> None:
+        ai.say_message(self.actuator_name, self.message)

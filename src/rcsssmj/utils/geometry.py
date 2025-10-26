@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import math
 from typing import Final
 
+import numpy as np
+from numpy.typing import NDArray
 
 class AABB2D:
     """2-dimensional axis-aligned bounding-box."""
@@ -142,3 +145,13 @@ class AABB3D:
         """Check if the given x-, y- and z-coordinates are within the bounding box."""
 
         return self.min_x <= x and x <= self.max_x and self.min_y <= y and y <= self.max_y and self.min_z <= z and z <= self.max_z
+
+
+def distance(a: NDArray[np.float64], b: NDArray[np.float64]) -> float:
+    """Return the euclidean distance between points."""
+
+    res = 0.0
+    for i in range(len(a)):
+        tmp = b[i] - a[i]
+        res += tmp * tmp
+    return math.sqrt(res)

@@ -485,6 +485,46 @@ S-Expression:
                 (llowerarm (pol 0.18 34.29 -19.80))))
 
 
+.. _agent-protocol_hear-perceptor:
+
+Hear Perceptor
+^^^^^^^^^^^^^^^^^^^^
+
+The hear perceptor for receiving messages sent by other agents.
+
++-----------------+-------+---------+---------------------------------------------------+
+| Perceptor       | Type  | Unit    | Description                                       |
+| Information     |       |         |                                                   |
++=================+=======+=========+===================================================+
+| **message**     | str   |         | The received Base64-encoded message.              |
++-----------------+-------+---------+---------------------------------------------------+
+| :py:class:`rcsssmj.games.soccer.agent.perception.HearPerception`                      |
++-------------+-------------+-----------+-----------------------------------------------+
+
+For more information see `Say Effector`_.
+
+Frequency
+    Depends on when agents send a message.
+
+Noise Model
+    See `Say Effector`_.
+
+
+Message Format
+""""""""""""""
+
+S-Expression:
+    .. code::
+
+        (hear <message>)
+
+    Example message:
+
+    .. code::
+
+        (hear AA==)
+
+
 .. _agent-protocol_effectors:
 
 Effectors
@@ -636,15 +676,33 @@ S-Expression:
 Say Effector
 ^^^^^^^^^^^^
 
-Effector for exchanging text messages within the simulation in an audio-like fashion.
+Effector for exchanging messages within the simulation.
 
-Agents have a certain say capacity, which they can use to broadcast text messages in the simulation.
-These text messages are then received by other agents within the audible range.
++-----------------+-------+-------+-----------------------------------------------------+
+| Effector        | Type  | Unit  | Description                                         |
+| Information     |       |       |                                                     |
++=================+=======+=======+=====================================================+
+| **message**     | str   |       | The Base64-encoded message.                         |
++-----------------+-------+-------+-----------------------------------------------------+
+| :py:class:`rcsssmj.games.soccer.agent.action.SayAction`                               |
++-----------------+-------+-------+-----------------------------------------------------+
 
-.. note::
+A say message has a maximum length of 20 bytes.
+An agent may only send one message per cycle. Further messages are ignored.
+The message is encoded using Base64. Padding is not optional.
 
-    Not implemented yet.
+A message is trying to be delivered to all connected agents (including the opponent team).
+The only exception is the sending agent, which will not receive its own message.
 
+Noise Model
+    Messages can be subject to artificial packet loss.
+    This packet loss depends on two factors.
+    One factor is the distance between the sender and the receiver.
+    If the distance is higher, the chance of packet loss is higher.
+    The other factor is the number of messages sent simultaneously by a team.
+    If more messages are sent in a single cycle, the chance of packet loss is higher.
+    This factor is present even with only one agent sending a message in order to limit the number
+    of sent messages over multiple cycles.
 
 Message Format
 """"""""""""""
@@ -658,4 +716,4 @@ S-Expression:
 
     .. code::
 
-        (say HelloWorld)
+        (say AA==)

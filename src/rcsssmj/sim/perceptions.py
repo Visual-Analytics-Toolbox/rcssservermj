@@ -427,3 +427,32 @@ class VisionPerception(Perception):
         detections = [d.to_sexp() for d in self.obj_detections]
 
         return '(' + self.name + ' ' + ''.join(detections) + ')'
+
+
+class HearPerception(Perception):
+    """Hear perception."""
+
+    def __init__(
+        self,
+        message: str,
+    ) -> None:
+        """Construct a new hear perception.
+
+        Parameter
+        ---------
+        message: str
+            The message to send.
+        """
+
+        super().__init__('hear')
+
+        self.message: str = message
+        """The message to send."""
+
+    def to_sexp(self) -> str:
+        """Return a symbolic expression representing this perception.
+
+        Expression format: (hear <message>)
+        """
+
+        return f'(hear {self.message})'

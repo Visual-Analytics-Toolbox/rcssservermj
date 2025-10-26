@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import Any, Final
+from typing import Any, Dict, Final
 
 import numpy as np
 from mujoco import mjtJoint
@@ -7,6 +7,7 @@ from numpy.typing import NDArray
 
 from rcsssmj.sim.agent_id import AgentID
 from rcsssmj.sim.perceptions import Perception
+from rcsssmj.sim.sim_atom import SimAtom
 from rcsssmj.sim.sim_object import SimObject
 
 
@@ -39,6 +40,9 @@ class SimAgent(SimObject):
         self.spec: Final[Any] = spec
         """The robot model specification."""
 
+        self.sim_atoms: Dict[str, SimAtom] = {}
+        """The list of subcomponents of interest (usually providing some extra functionality)."""
+
         self._markers: Sequence[tuple[str, str]] = []
         """The visible markers of the object model."""
 
@@ -62,6 +66,9 @@ class SimAgent(SimObject):
 
     def bind(self, mj_model: Any, mj_data: Any) -> None:
         super().bind(mj_model, mj_data)
+
+        for atom in self.sim_atoms.values():
+            atom.bind(mj_model, mj_data)
 
         # extract visual markers
         prefix_len = len(self.agent_id.prefix)
