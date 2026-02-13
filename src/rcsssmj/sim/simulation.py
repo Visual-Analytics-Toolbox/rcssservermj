@@ -198,7 +198,7 @@ class BaseSimulation(ABC):
         mujoco.mj_forward(self._mj_model, self._mj_data)
 
         # extract visible object markers of world
-        self._world_markers = [(site.name, site.name[:-10]) for site in self._mj_spec.sites if site.name.endswith('-vismarker')]
+        self._world_markers = [(site.name, site.name[0].upper()) for site in self._mj_spec.sites if site.name.endswith('-vismarker')]
 
         # reset frame id
         self._frame_id = 0
