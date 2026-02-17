@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Final
+from typing import Final, Generic, TypeVar
 
 from rcsssmj.sim.sim_interfaces import PSimActionInterface
 
@@ -40,7 +40,10 @@ class InitRequest:
         """The requested player number."""
 
 
-class SimAction(ABC):
+SAI = TypeVar('SAI', bound=PSimActionInterface)
+
+
+class SimAction(ABC, Generic[SAI]):
     """Base class for simulation actions."""
 
     def __init__(self, actuator_name: str) -> None:
@@ -58,17 +61,17 @@ class SimAction(ABC):
         """The name of the actuator."""
 
     @abstractmethod
-    def perform(self, ai: PSimActionInterface) -> None:
+    def perform(self, ai: SAI) -> None:
         """Perform this action.
 
         Parameter
         ---------
-        ai: PSimActionInterface
+        ai: SAI
             The simulation action interface.
         """
 
 
-class MotorAction(SimAction):
+class MotorAction(SimAction[PSimActionInterface]):
     """Class for representing a motor action."""
 
     def __init__(self, actuator_name: str, q: float, dq: float, kp: float, kd: float, tau: float):

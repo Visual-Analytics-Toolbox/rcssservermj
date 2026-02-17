@@ -7,9 +7,6 @@ import mujoco
 import numpy as np
 
 from rcsssmj.resources.spec_provider import ModelSpecProvider
-from rcsssmj.sim.actions import SimAction
-from rcsssmj.sim.agent_id import AgentID
-from rcsssmj.sim.agent_params import PAgentParameter
 from rcsssmj.sim.commands import MonitorCommand
 from rcsssmj.sim.perceptions import (
     AccelerometerPerception,
@@ -213,70 +210,15 @@ class BaseSimulation(ABC):
         self._mj_data = None
         self._world_markers = []
 
-    def add_agents(self, params: Sequence[PAgentParameter]) -> list[SimAgent | None]:
-        """Try adding agent representations for the given list of agent params.
-
-        Parameter
-        ---------
-        params: Sequence[PAgentParameter]
-            The list of parameter for which to add agents.
-        """
-
-        # add agents
-        sim_agents = [self._add_agent(p) for p in params]
-
-        if sim_agents:
-            # recompile spec in case new agents got added
-            self._recompile()
-
-        return sim_agents
-
-    def _add_agent(self, params: PAgentParameter) -> SimAgent | None:
-        """Try to add an agent with the given parameter.
-
-        Parameter
-        ---------
-        params: PAgentParameter
-            The agent parameter.
-        """
-
-        # try to load the robot model requested by the agent
-        robot_spec = self.spec_provider.load_robot(params.model_name)
-        if robot_spec is None:
-            # failed to load the requested model --> report failure
-            return None
-
-        # request participation in game
-        sim_agent = self._request_participation(params.team_name, params.player_no, robot_spec)
-        if sim_agent is None:
-            # invalid team side -> report failure
-            return None
+    def _attach_agent(self, agent: SimAgent) -> None:
+        """Attach an agent to the world."""
 
         # append robot to world
         frame = self._mj_spec.worldbody.add_frame()
-        frame.attach_body(robot_spec.body('torso'), sim_agent.agent_id.prefix, '')
+        frame.attach_body(agent.spec.body('torso'), agent.agent_id.prefix, '')
 
-        logger.info('Player %s #%d joined the game.', params.team_name, params.player_no)
-
-        return sim_agent
-
-    def remove_agents(self, agents: Sequence[SimAgent]) -> None:
-        """Remove the given list of agents.
-
-        Parameter
-        ---------
-        agents: Sequence[SimAgent]
-            The list of agent instances to remove.
-        """
-
-        if agents:
-            for agent in agents:
-                self._remove_agent(agent)
-
-            self._recompile()
-
-    def _remove_agent(self, agent: SimAgent) -> None:
-        """Remove the given agent instance.
+    def _detach_agent(self, agent: SimAgent) -> None:
+        """Detach the given agent instance.
 
         Parameter
         ---------
@@ -306,11 +248,6 @@ class BaseSimulation(ABC):
         del_els(agent.spec.texts)
         del_els(agent.spec.textures)
 
-        # remove agent from game
-        self._handle_withdrawal(agent.agent_id)
-
-        logger.info('Player %s left the game.', agent)
-
     def _recompile(self) -> None:
         """Recompile spec and bind sim objects."""
 
@@ -324,20 +261,17 @@ class BaseSimulation(ABC):
         for obj in self.sim_objects:
             obj.bind(self._mj_model, self._mj_data)
 
-    def step(self, agent_actions: Sequence[SimAction], monitor_commands: Sequence[MonitorCommand]) -> None:
+    def step(self, monitor_commands: Sequence[MonitorCommand]) -> None:
         """Perform a simulation step.
 
         Parameter
         ---------
-        agent_actions: Sequence[SimAction]
-            The list of simulation agent actions.
-
         monitor_commands: Sequence[MonitorCommand]
             The list of monitor commands.
         """
 
         # pre-step hook
-        self._pre_step(agent_actions)
+        self._pre_step()
 
         # progress simulation
         mujoco.mj_step(self._mj_model, self._mj_data, self.n_substeps)
@@ -348,22 +282,12 @@ class BaseSimulation(ABC):
         # increment frame id
         self._frame_id += 1
 
-    def _pre_step(self, agent_actions: Sequence[SimAction]) -> None:
-        """Method executed right before a simulation step.
-
-        Parameter
-        ---------
-        agent_actions: Sequence[SimAction]
-            The list of simulation actions.
-        """
+    def _pre_step(self) -> None:
+        """Method executed right before a simulation step."""
 
         # notify simulation objects
         for obj in self.sim_objects:
             obj.pre_step(self._mj_model, self._mj_data)
-
-        # apply agent actions
-        for action in agent_actions:
-            action.perform(self)
 
     def _post_step(self, monitor_commands: Sequence[MonitorCommand]) -> None:
         """Method executed right after a simulation step.
@@ -534,37 +458,6 @@ class BaseSimulation(ABC):
         -------
         MjSpec
             The game specific simulation world / environment specification.
-        """
-
-    @abstractmethod
-    def _request_participation(self, team_name: str, player_no: int, model_spec: Any) -> SimAgent | None:
-        """Validate and add a new agent requesting to join the game.
-
-        Parameter
-        ---------
-        team_name: str
-            The team name of the agent requesting participation.
-
-        player_no: int
-            The player number of the agent requesting participation.
-
-        model_spec: MjSpec
-            The robot model specification of the new agent.
-
-        Returns
-        -------
-        SimAgent | None
-            The simulation agent representation identifying the new agent if participation has been accepted, None if participation of the new agent has been rejected.
-        """
-
-    @abstractmethod
-    def _handle_withdrawal(self, agent_id: AgentID) -> None:
-        """Handle the withdrawal of an agent participating in the game.
-
-        Parameter
-        ---------
-        aid: AgentID
-            The id of the agent that withdrawed from the game.
         """
 
     @abstractmethod

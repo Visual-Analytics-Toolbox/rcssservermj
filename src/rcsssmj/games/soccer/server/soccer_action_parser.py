@@ -2,17 +2,19 @@ import logging
 from math import radians
 
 from rcsssmj.games.soccer.sim.soccer_actions import BeamAction, SayAction
+from rcsssmj.games.soccer.sim.soccer_sim_interfaces import PSoccerSimActionInterface
 from rcsssmj.server.action_parser import DefaultActionParser
 from rcsssmj.sim.actions import SimAction
+from rcsssmj.sim.sim_interfaces import PSimActionInterface
 from rcsssmj.utils.sexpression import SExpression
 
 logger = logging.getLogger(__name__)
 
 
-class SoccerActionParser(DefaultActionParser):
+class SoccerActionParser(DefaultActionParser[PSoccerSimActionInterface]):
     """Soccer action message parser implementation."""
 
-    def parse_node(self, node: SExpression, model_prefix: str) -> SimAction | None:
+    def parse_node(self, node: SExpression, model_prefix: str) -> SimAction[PSimActionInterface] | SimAction[PSoccerSimActionInterface] | None:
         n_elements = len(node)
 
         if node[0] == b'beam' and n_elements == 4:

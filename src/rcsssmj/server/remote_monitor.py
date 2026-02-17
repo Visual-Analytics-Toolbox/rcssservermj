@@ -93,17 +93,25 @@ class RemoteMonitor(SimMonitor):
         super().__init__()
 
         self._conn: PConnection = conn
+        """The monitor connection for exchanging state and command messages."""
+
         self._parser: CommandParser = parser
+        """Parser for parsing incoming command messages."""
 
-        self._receive_thread: Thread = Thread(target=self._receive_loop)
+        self._receive_thread: Thread | None = None
+        """The receive thread, running the receive loop."""
 
-        # start receive loop
-        self._receive_thread.start()
+    def start_receive_loop(self) -> None:
+        """Start listener thread if not already running."""
+
+        if self._receive_thread is None:
+            self._receive_thread = Thread(target=self._receive_loop)
+            self._receive_thread.start()
 
     def shutdown(self, *, wait: bool = False) -> None:
         self._conn.shutdown()
 
-        if wait:
+        if wait and self._receive_thread is not None:
             self._receive_thread.join()
 
     def update(self, state_info: Sequence[SimStateInformation], frame_id: int) -> None:
