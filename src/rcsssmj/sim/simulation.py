@@ -482,41 +482,112 @@ class BaseSimulation(ABC):
                 # fetch camera sensor site
                 camera_site = self._mj_data.site(agent.agent_id.prefix + 'camera')
 
-                if camera_site is not None:
-                    # fetch pose of camera site of robot model
-                    camera_pos = camera_site.xpos.astype(np.float64)
-                    camera_rot = camera_site.xmat.astype(np.float64).reshape((3, 3))
+                # If the camera site does not exist, skip vision processing
+                if camera_site is None:
+                    agent.set_perceptions(agent_perceptions)
+                    continue
 
-                    # transform detectable obj positions to camera frame
-                    local_obj_pos = np.matmul(camera_rot.T, obj_pos - camera_pos[:, np.newaxis])
+                # fetch pose of camera site of robot model
+                camera_pos = camera_site.xpos.astype(np.float64)
+                camera_rot = camera_site.xmat.astype(np.float64).reshape((3, 3))
 
-                    # transform local positions into polar coordinates
-                    azimuths = trunc2_vec(np.degrees(np.atan2(local_obj_pos[1], local_obj_pos[0])))
-                    distances = np.linalg.norm(local_obj_pos, axis=0)
-                    elevations = trunc2_vec(np.degrees(np.asin(local_obj_pos[2] / distances)))
-                    distances = trunc2_vec(distances)
+                # transform object world positions into the camera reference frame
+                local_obj_pos = np.matmul(camera_rot.T, obj_pos - camera_pos[:, np.newaxis])
 
-                    # TODO: Apply sensor noise
+                # Cartesian to polar conversion
+                azimuths = np.degrees(np.atan2(local_obj_pos[1], local_obj_pos[0]))
+                distances = np.linalg.norm(local_obj_pos, axis=0)
 
-                    # check object coordinates for horizontal and vertical view range
-                    half_horizontal_range = 60
-                    half_vertical_range = 60
-                    obj_visibility = (azimuths >= -half_horizontal_range) & (azimuths <= half_horizontal_range) & (elevations >= -half_vertical_range) & (elevations <= half_vertical_range)
+                z_ratio = local_obj_pos[2] / np.maximum(distances, 1e-6)
+                z_ratio = np.clip(z_ratio, -1.0, 1.0) # prevent division and floating point errors
+                elevations = np.degrees(np.asin(z_ratio))
 
-                    # extract simple world object detections
-                    obj_detections: list[PObjectDetection] = [ObjectDetection(obj_markers[i][1], azimuths[i], elevations[i], distances[i]) for i in range(n_world_markers) if obj_visibility[i]]
+                # field-of-view half-ranges
+                half_horizontal_range = 60
+                half_vertical_range = 60
 
-                    # extract player object detections
-                    idx = n_world_markers
+                # boolean visibility mask
+                obj_visibility = (
+                    (azimuths >= -half_horizontal_range) &
+                    (azimuths <= half_horizontal_range) &
+                    (elevations >= -half_vertical_range) &
+                    (elevations <= half_vertical_range)
+                )
+
+                n_visible = np.count_nonzero(obj_visibility)
+                obj_detections: list[PObjectDetection] = []
+
+                # --- NOISE GENERATION ---
+                if n_visible > 0:
+
+                    noisy_dists = distances.copy()
+                    noisy_azis = azimuths.copy()
+                    noisy_eles = elevations.copy()
+
+                    # noise parameters
+                    sigma_dist_factor = 0.01
+                    sigma_angle_factor = 0.5
+
+                    # gather visible values
+                    vis_real_dists = distances[obj_visibility]
+                    vis_azis = azimuths[obj_visibility]
+                    vis_eles = elevations[obj_visibility]
+
+                    # vectorized Gaussian noise
+                    dist_noise = np.random.normal(0.0, vis_real_dists * sigma_dist_factor, n_visible)
+                    azi_noise = np.random.normal(0.0, sigma_angle_factor, n_visible)
+                    ele_noise = np.random.normal(0.0, sigma_angle_factor, n_visible)
+
+                    # apply noise
+                    noisy_dists[obj_visibility] = np.maximum(0.0, vis_real_dists + dist_noise)
+                    noisy_azis[obj_visibility] = vis_azis + azi_noise
+                    noisy_eles[obj_visibility] = vis_eles + ele_noise
+
+                    # --- DETECTION ASSEMBLY ---
+                    def create_det(idx):
+                        return ObjectDetection(
+                            obj_markers[idx][0],
+                            trunc2(noisy_azis[idx]),
+                            trunc2(noisy_eles[idx]),
+                            trunc2(noisy_dists[idx])
+                        )
+
+                    # static world objects
+                    for i in range(n_world_markers):
+                        if obj_visibility[i]:
+                            obj_detections.append(create_det(i))
+
+                    # player markers
+                    idx_cursor = n_world_markers
+
                     for player in agents:
-                        n_player_markers = len(player.markers)
-                        player_detections = [ObjectDetection(obj_markers[i][1], azimuths[i], elevations[i], distances[i]) for i in range(idx, idx + n_player_markers) if obj_visibility[i]]
-                        if player_detections:
-                            obj_detections.append(AgentDetection('P', player.team_name, player.agent_id.player_no, player_detections))
+                        # skips if the agent is itself
+                        if player.agent_id == agent.agent_id:
+                            idx_cursor += len(player.markers)
+                            continue
 
-                        idx += n_player_markers
+                        n_player_parts = len(player.markers)
+                        end_cursor = idx_cursor + n_player_parts
 
-                    agent_perceptions.append(VisionPerception('See', obj_detections))
+                        # slice visibility mask
+                        player_mask = obj_visibility[idx_cursor:end_cursor]
+
+                        if np.any(player_mask):
+                            visible_indices = np.flatnonzero(player_mask) + idx_cursor
+                            player_parts = [create_det(k) for k in visible_indices]
+
+                            obj_detections.append(
+                                AgentDetection(
+                                    'P',
+                                    player.team_name,
+                                    player.agent_id.player_no,
+                                    player_parts
+                                )
+                            )
+
+                        idx_cursor = end_cursor
+
+                agent_perceptions.append(VisionPerception('See', obj_detections))
 
             # forward generated perceptions to agent instance
             agent.set_perceptions(agent_perceptions)
