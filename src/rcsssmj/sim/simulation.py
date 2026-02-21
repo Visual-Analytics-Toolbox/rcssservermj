@@ -1,17 +1,19 @@
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
 import mujoco
 import numpy as np
 
 from rcsssmj.resources.spec_provider import ModelSpecProvider
+from rcsssmj.sim.audio_engine import a_compile, a_forward, a_recompile, a_step
 from rcsssmj.sim.commands import MonitorCommand
 from rcsssmj.sim.perceptions import (
     AccelerometerPerception,
     AgentDetection,
     GyroPerception,
+    HearPerception,
     JointStatePerception,
     ObjectDetection,
     OrientationPerception,
@@ -25,6 +27,9 @@ from rcsssmj.sim.perceptions import (
 from rcsssmj.sim.sim_agent import SimAgent
 from rcsssmj.sim.sim_object import SimObject
 from rcsssmj.sim.state_info import SceneGraph, SimStateInformation
+
+if TYPE_CHECKING:
+    from rcsssmj.sim.audio_data import AudioData
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +77,10 @@ class BaseSimulation(ABC):
         """The mujoco simulation model."""
 
         self._mj_data: Any = None
-        """The mujoco simulation data array."""
+        """The mujoco simulation data."""
+
+        self._a_data: AudioData = None  # type: ignore
+        """The audio engine data."""
 
         self._world_markers: Sequence[tuple[str, str]] = []
         """The sequence of world markers used for generating vision perceptions."""
@@ -97,7 +105,7 @@ class BaseSimulation(ABC):
 
     @property
     def mj_data(self) -> Any:
-        """The mujoco simulation data array."""
+        """The mujoco simulation data."""
 
         return self._mj_data
 
@@ -178,6 +186,23 @@ class BaseSimulation(ABC):
             actuator_vel_model.gainprm[0] = kd
             actuator_vel_model.biasprm[2] = -kd
 
+    def say_message(self, actuator_name: str, message: bytes | bytearray) -> None:
+        """Perform a say action.
+
+        Parameter
+        ---------
+        actuator_name: str
+            The name of the say actuator.
+
+        message: bytes | bytearray
+            The message to say.
+        """
+
+        actuator = self._a_data.actuators.get(actuator_name, None)
+
+        if actuator is not None:
+            actuator.ctrl = message
+
     def init(self) -> bool:
         """Initialize the game and create a new simulation world environment."""
 
@@ -193,6 +218,9 @@ class BaseSimulation(ABC):
 
         # calculate forward kinematics / dynamics of newly created world
         mujoco.mj_forward(self._mj_model, self._mj_data)
+
+        # prepare initial audio simulation data
+        self._a_data = a_compile(self._mj_spec)
 
         # extract visible object markers of world
         self._world_markers = [(site.name, site.name[:-10]) for site in self._mj_spec.sites if site.name.endswith('-vismarker')]
@@ -257,6 +285,12 @@ class BaseSimulation(ABC):
         # calculate forward kinematics / dynamics
         mujoco.mj_forward(self._mj_model, self._mj_data)
 
+        # recompile audio spec
+        self._a_data = a_recompile(self._mj_spec, self._a_data)
+
+        # calculate audio information
+        a_forward(self._a_data, self._mj_data)
+
         # rebind objects
         for obj in self.sim_objects:
             obj.bind(self._mj_model, self._mj_data)
@@ -275,6 +309,9 @@ class BaseSimulation(ABC):
 
         # progress simulation
         mujoco.mj_step(self._mj_model, self._mj_data, self.n_substeps)
+
+        # progress audio simulation
+        a_step(self._a_data, self._mj_data)
 
         # post-step hook
         self._post_step(monitor_commands)
@@ -391,7 +428,7 @@ class BaseSimulation(ABC):
                     px, py, pz = trunc3_vec(sensor.data[0:3])
                     agent_perceptions.append(PositionPerception(sensor_name, px, py, pz))
 
-                # TODO: Add perceptions for force and hear
+                # TODO: Add perceptions for force
 
                 else:
                     # sensor not supported...
@@ -400,6 +437,30 @@ class BaseSimulation(ABC):
             # joint state perception
             if joint_names:
                 agent_perceptions.append(JointStatePerception(joint_names, trunc2_vec(np.degrees(joint_axs)), trunc2_vec(np.degrees(joint_vxs))))
+
+            # audio perception
+            a_sensor = self._a_data.sensors.get(agent.agent_id.prefix + 'hear', None)
+            if a_sensor is not None:
+                n_msgs = len(a_sensor.messages)
+
+                # TODO: Introduce loss probability based on message volume and ambient volume.
+                # some distance based packet loss probability
+                # -  25 meter distance -->  4.1% packet loss
+                # -  40 meter distance --> 22.2% packet loss
+                # -  50 meter distance --> 50.0% packet loss
+                # -  60 meter distance --> 77.8% packet loss
+                # -  75 meter distance --> 95.9% packet loss
+                # - 100 meter distance --> 99.8% packet loss
+                packet_loss_rate_distance = 0.5 * np.tanh(np.pi * a_sensor.distances / 50.0 - np.pi) + 0.5
+
+                msg_indices = cast(Sequence[int], np.nonzero(np.random.rand(n_msgs) > packet_loss_rate_distance)[0])  # cast to int sequence as mypy complains about not being able to use a numpy array element for indexing
+
+                for idx in msg_indices:
+                    if a_sensor.sources[idx].startswith(agent.agent_id.prefix):
+                        # skip self messages
+                        continue
+
+                    agent_perceptions.append(HearPerception(a_sensor.messages[idx]))
 
             # ideal camera sensor-pipeline
             if gen_vision:
