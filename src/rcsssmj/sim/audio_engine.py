@@ -130,7 +130,7 @@ def a_forward(a_data: AudioData, mj_data: Any) -> None:
 
         # calculate volumes based on origin distances
         distances = np.linalg.norm(local_origins, axis=0)
-        s_volumes = a_data.volumes / (distances + 1)  # TODO: replace naive linear distance volume decay with correct volume decay for sound waves
+        s_volumes = a_data.volumes * np.pow(10, np.log2(np.maximum(distances, 1)) * -6 / 20)
 
         # set sensor information
         mic.messages = a_data.messages
