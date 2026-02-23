@@ -4,7 +4,7 @@ from rcsssmj.games.soccer.server.remote_soccer_agent import RemoteSoccerAgent
 from rcsssmj.games.soccer.server.soccer_action_parser import SoccerActionParser
 from rcsssmj.games.soccer.server.soccer_command_parser import SoccerCommandParser
 from rcsssmj.games.soccer.sim.soccer_sim import SoccerSimulation
-from rcsssmj.server.communication.connection_listener import ConnectionListener
+from rcsssmj.server.communication.tcp_connection_listener import TCPConnectionListener
 from rcsssmj.server.perception_encoder import DefaultPerceptionEncoder, PerceptionEncoder
 from rcsssmj.server.remote_monitor import RemoteMonitor
 from rcsssmj.server.server import SimServer
@@ -41,10 +41,10 @@ class SoccerSimServer(SimServer[SoccerSimulation]):
             The server host address.
 
         agent_port: int, default=60000
-            The port on which to listen for incoming agent connections.
+            The port on which to listen for incoming TCP agent connections.
 
         monitor_port: int, default=60001
-            The port on which to listen for incoming monitor connections.
+            The port on which to listen for incoming TCP monitor connections.
 
         sequential_mode: bool, default=False
             Flag for selecting sequential or parallel simulation update loop.
@@ -80,20 +80,20 @@ class SoccerSimServer(SimServer[SoccerSimulation]):
 
         # register agent connection listeners
         self._connection_listeners.append(
-            ConnectionListener(
+            TCPConnectionListener(
+                lambda conn: self._run_remote_agent(RemoteSoccerAgent(conn, self._action_parser, self._perception_encoder)),
                 'agent',
                 host,
                 agent_port,
-                lambda conn: self._register_remote_agent(RemoteSoccerAgent(conn, self._action_parser, self._perception_encoder)),
             )
         )
 
         # register monitor connection listeners
         self._connection_listeners.append(
-            ConnectionListener(
+            TCPConnectionListener(
+                lambda conn: self._run_remote_monitor(RemoteMonitor(conn, self._command_parser)),
                 'monitor',
                 host,
                 monitor_port,
-                lambda conn: self._register_remote_monitor(RemoteMonitor(conn, self._command_parser)),
             )
         )

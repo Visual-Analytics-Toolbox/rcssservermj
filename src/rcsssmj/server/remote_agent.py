@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from enum import Enum
 from queue import Empty, Queue
-from threading import Thread
+from threading import Thread, current_thread
 from typing import Generic, TypeVar, cast
 
 from rcsssmj.server.action_parser import ActionParser
@@ -63,8 +63,8 @@ class RemoteAgent(Generic[S], ABC):
         self._encoder: PerceptionEncoder = encoder
         """Encoder for encoding outgoing perception messages."""
 
-        self._receive_thread: Thread | None = None
-        """The receive thread, running the receive loop."""
+        self._agent_thread: Thread | None = None
+        """The thread, running the agent receive loop (if existing)."""
 
     @property
     def state(self) -> RemoteAgentState:
@@ -82,13 +82,6 @@ class RemoteAgent(Generic[S], ABC):
     @abstractmethod
     def sim_agent(self) -> SimAgent | None:
         """The simulation agent instance associated with this remote agent (if existing)."""
-
-    def start_receive_loop(self) -> None:
-        """Start listener thread if not already running."""
-
-        if self._receive_thread is None:
-            self._receive_thread = Thread(target=self._receive_loop)
-            self._receive_thread.start()
 
     def activate(self, sim: S) -> None:
         """Activate the remote agent."""
@@ -115,19 +108,16 @@ class RemoteAgent(Generic[S], ABC):
     def deactivate(self, sim: S) -> None:
         """Deactivate remote agent instance."""
 
-    def shutdown(self, *, wait: bool = False) -> None:
-        """Stop the agent.
-
-        Parameter
-        ---------
-        wait: bool, default=False
-            True, if the calling thread should be blocked until the agent has finished its shutdown process, false if not.
-        """
+    def shutdown(self) -> None:
+        """Stop the agent."""
 
         self._conn.shutdown()
 
-        if wait and self._receive_thread is not None:
-            self._receive_thread.join()
+    def join(self) -> None:
+        """Wait until the agent listener thread terminates (if existing)."""
+
+        if self._agent_thread is not None:
+            self._agent_thread.join()
 
     @abstractmethod
     def collect_actions(self, *, block: bool = False, timeout: float = 5) -> None:
@@ -156,8 +146,19 @@ class RemoteAgent(Generic[S], ABC):
 
         self._conn.send_message(msg)
 
-    def _receive_loop(self) -> None:
-        """The internal receive loop for continuously receiving agent actions."""
+    def run(self) -> None:
+        """Continuously receive and process agent actions.
+
+        Note: This method is blocking until the agent connection has been closed and thus supposed to be executed in a separate thread.
+        """
+
+        if self._agent_thread is not None:
+            logger.warning('run()-method of remote agent %s called multiple times! Joining existing agent thread.', self)
+            self._agent_thread.join()
+            return
+
+        # fetch agent thread instance
+        self._agent_thread = current_thread()
 
         while True:
             # receive next action message

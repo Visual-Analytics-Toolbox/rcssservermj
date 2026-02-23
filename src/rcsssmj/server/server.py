@@ -3,7 +3,7 @@ import time
 from collections.abc import Sequence
 from queue import Empty
 from threading import Lock, Thread
-from typing import TYPE_CHECKING, Final, Generic, TypeVar
+from typing import TYPE_CHECKING, Final, Generic, Protocol, TypeVar
 
 from rcsssmj.monitor.mujoco_monitor import MujocoMonitor
 from rcsssmj.server.remote_agent import RemoteAgent, RemoteAgentState
@@ -12,9 +12,19 @@ from rcsssmj.sim.commands import MonitorCommand
 from rcsssmj.sim.simulation import BaseSimulation
 
 if TYPE_CHECKING:
-    from rcsssmj.server.communication.connection_listener import ConnectionListener
+    from rcsssmj.server.communication.connection_listener import PConnectionListener
 
 logger = logging.getLogger(__name__)
+
+
+class PServerComponent(Protocol):
+    """Protocol for server components likely running in own threads."""
+
+    def shutdown(self) -> None:
+        """Shutdown the component."""
+
+    def join(self) -> None:
+        """Wait until the component thread terminates (if existing)."""
 
 
 S = TypeVar('S', bound=BaseSimulation)
@@ -87,13 +97,13 @@ class SimServer(Generic[S]):
         self.render: Final[bool] = render
         """Flag for enabling / disabling the internal mujoco viewer monitor."""
 
-        self._connection_listeners: Final[list[ConnectionListener]] = []
+        self._connection_listeners: Final[list[PConnectionListener]] = []
         """The list of connection listeners."""
 
-        self._agents: list[RemoteAgent[S]] = []
+        self._agents: Final[list[RemoteAgent[S]]] = []
         """The list of connected agents."""
 
-        self._monitors: list[SimMonitor] = []
+        self._monitors: Final[list[SimMonitor]] = []
         """The list of connected monitors."""
 
         self._mutex: Lock = Lock()
@@ -138,22 +148,16 @@ class SimServer(Generic[S]):
         self._shutdown = True
 
         # shutdown connection listeners
-        for cl in self._connection_listeners:
-            cl.shutdown()
-
-        # wait for connection listener threads to terminate
-        for cl in self._connection_listeners:
-            cl.join()
+        self._graceful_shutdown(self._connection_listeners)
+        self._connection_listeners.clear()
 
         # shutdown active agents
-        for agent in self._agents:
-            agent.shutdown(wait=True)
+        self._graceful_shutdown(self._agents)
         self._agents.clear()
         logger.info('Disconnected agents.')
 
         # shutdown active monitors
-        for monitor in self._monitors:
-            monitor.shutdown(wait=True)
+        self._graceful_shutdown(self._monitors)
         self._monitors.clear()
         logger.info('Disconnected monitors.')
 
@@ -163,6 +167,17 @@ class SimServer(Generic[S]):
 
         logger.info('Shutting down server... DONE!')
 
+    def _graceful_shutdown(self, components: Sequence[PServerComponent]) -> None:
+        """Shutdown the given list of components and wait until all component threads have terminated."""
+
+        # trigger shutdown
+        for c in components:
+            c.shutdown()
+
+        # wait for component threads to finish
+        for c in components:
+            c.join()
+
     def shutdown(self) -> None:
         """Request server shutdown."""
 
@@ -170,23 +185,35 @@ class SimServer(Generic[S]):
 
         logger.info('Shutdown requested.')
 
-    def _register_remote_agent(self, agent: RemoteAgent[S]) -> None:
-        """Register the given remote agent to the server."""
+    def _run_remote_agent(self, agent: RemoteAgent[S]) -> None:
+        """Register the given remote agent to the server and run its receive loop.
 
-        # run agent thread
-        agent.start_receive_loop()
+        Parameter
+        ---------
+        agent: RemoteAgent[S]
+            The agent instance to run.
+        """
 
         with self._mutex:
             self._agents.append(agent)
 
-    def _register_remote_monitor(self, monitor: RemoteMonitor) -> None:
-        """Register the given remote monitor to the server."""
+        # run receive loop
+        agent.run()
 
-        # run monitor thread
-        monitor.start_receive_loop()
+    def _run_remote_monitor(self, monitor: RemoteMonitor) -> None:
+        """Register the given remote monitor to the server and run its receive loop.
+
+        Parameter
+        ---------
+        monitor: RemoteMonitor
+            The monitor instance to run.
+        """
 
         with self._mutex:
             self._monitors.append(monitor)
+
+        # run receive loop
+        monitor.run()
 
     def _run_simulation(self) -> None:
         """Simulation main loop.
