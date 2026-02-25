@@ -29,28 +29,3 @@ class BeamAction(SimAction[PSoccerSimActionInterface]):
 
     def perform(self, sai: PSoccerSimActionInterface) -> None:
         sai.beam_agent(self.actuator_name, self.target_pose)
-
-
-class SayAction(SimAction[PSoccerSimActionInterface]):
-    """Class for representing a say action."""
-
-    def __init__(self, actuator_name: str, message: str):
-        """Construct a new say action.
-
-        Parameter
-        ---------
-        actuator_name: str
-            The name of the beam effector.
-
-        message: str
-            The message to say.
-        """
-
-        super().__init__(actuator_name)
-
-        self.message: Final[str] = message
-        """The message to say."""
-
-    def perform(self, sai: PSoccerSimActionInterface) -> None:
-        # TODO: implement audio logic
-        pass

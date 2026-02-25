@@ -1,3 +1,4 @@
+import base64
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import Final, Protocol
@@ -427,3 +428,29 @@ class VisionPerception(Perception):
         detections = [d.to_sexp() for d in self.obj_detections]
 
         return '(' + self.name + ' ' + ''.join(detections) + ')'
+
+
+class HearPerception(Perception):
+    """Hear perception."""
+
+    def __init__(self, message: bytes | bytearray) -> None:
+        """Construct a new hear perception.
+
+        Parameter
+        ---------
+        message: bytes | bytearray
+            The detected message.
+        """
+
+        super().__init__('hear')
+
+        self.message: Final[bytes | bytearray] = message
+        """The message to send."""
+
+    def to_sexp(self) -> str:
+        """Return a symbolic expression representing this perception.
+
+        Expression format: (hear <message>)
+        """
+
+        return f'(hear {base64.b64encode(self.message).decode()})'

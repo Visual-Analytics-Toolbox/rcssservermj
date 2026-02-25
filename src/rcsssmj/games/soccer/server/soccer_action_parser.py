@@ -1,7 +1,7 @@
 import logging
 from math import radians
 
-from rcsssmj.games.soccer.sim.soccer_actions import BeamAction, SayAction
+from rcsssmj.games.soccer.sim.soccer_actions import BeamAction
 from rcsssmj.games.soccer.sim.soccer_sim_interfaces import PSoccerSimActionInterface
 from rcsssmj.server.action_parser import DefaultActionParser
 from rcsssmj.sim.actions import SimAction
@@ -20,9 +20,5 @@ class SoccerActionParser(DefaultActionParser[PSoccerSimActionInterface]):
         if node[0] == b'beam' and n_elements == 4:
             # beam action (beam <x> <y> <theta>)
             return BeamAction(model_prefix + 'beam', (node.get_float(1), node.get_float(2), radians(node.get_float(3))))
-
-        if node[0] == b'say' and n_elements > 1:
-            # say action: (say <message>)
-            return SayAction(model_prefix + 'say', ' '.join([node.get_str(i) for i in range(1, n_elements)]))
 
         return super().parse_node(node, model_prefix)
