@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from math import radians
 from typing import Generic, TypeVar
 
-from rcsssmj.sim.actions import InitRequest, MotorAction, SayAction, SimAction
+from rcsssmj.sim.actions import InitRequest, MotorAction, SimAction, SpeakerAction
 from rcsssmj.sim.sim_interfaces import PSimActionInterface
 from rcsssmj.utils.sexpression import SExpression
 
@@ -80,6 +80,17 @@ class DefaultActionParser(ActionParser[SAI]):
             # sync action: (syn)
             return None
 
+        if node[0] == b'SPK' and n_elements > 3:
+            # say action: (SPK <name> <volume> <message>)
+            try:
+                return SpeakerAction(
+                    model_prefix + node.get_str(1),
+                    node.get_float(2) / 100,
+                    base64.b64decode(node.get_str(3), validate=True),
+                )
+            except binascii.Error:
+                return None
+
         if n_elements == 6:
             # joint action: (<name> <q> <dq> <kp> <kd> <tau>)
             return MotorAction(
@@ -90,13 +101,6 @@ class DefaultActionParser(ActionParser[SAI]):
                 node.get_float(4),
                 node.get_float(5),
             )
-
-        if node[0] == b'say' and n_elements > 1:
-            # say action: (say <message>)
-            try:
-                return SayAction(model_prefix + 'say', base64.b64decode(node.get_str(1), validate=True))
-            except binascii.Error:
-                return None
 
         logger.debug('Unknown action node: %s', node)
 

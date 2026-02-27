@@ -119,25 +119,36 @@ class MotorAction(SimAction[PSimActionInterface]):
         ai.ctrl_motor(self.actuator_name, self.q, self.dq, self.kp, self.kd, self.tau)
 
 
-class SayAction(SimAction[PSimActionInterface]):
-    """Class for representing a say action."""
+class SpeakerAction(SimAction[PSimActionInterface]):
+    """Class for representing a speaker action."""
 
-    def __init__(self, actuator_name: str, message: bytes | bytearray):
-        """Construct a new say action.
+    def __init__(
+        self,
+        actuator_name: str,
+        volume: float,
+        message: bytes | bytearray,
+    ):
+        """Construct a new speaker action.
 
         Parameter
         ---------
         actuator_name: str
-            The name of the beam effector.
+            The name of the speaker effector.
+
+        volume: float
+            The speaker volume gain parameter.
 
         message: bytes | bytearray
-            The message to say.
+            The message to broadcast.
         """
 
         super().__init__(actuator_name)
 
+        self.volume: Final[float] = volume
+        """The speaker gain parameter."""
+
         self.message: Final[bytes | bytearray] = message
-        """The message to say."""
+        """The message to broadcast."""
 
     def perform(self, ai: PSimActionInterface) -> None:
-        ai.say_message(self.actuator_name, self.message)
+        ai.say_message(self.actuator_name, self.volume, self.message)

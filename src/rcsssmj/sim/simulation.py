@@ -13,8 +13,8 @@ from rcsssmj.sim.perceptions import (
     AccelerometerPerception,
     AgentDetection,
     GyroPerception,
-    HearPerception,
     JointStatePerception,
+    MicrophonePerception,
     ObjectDetection,
     OrientationPerception,
     Perception,
@@ -186,13 +186,21 @@ class BaseSimulation(ABC):
             actuator_vel_model.gainprm[0] = kd
             actuator_vel_model.biasprm[2] = -kd
 
-    def say_message(self, actuator_name: str, message: bytes | bytearray) -> None:
+    def say_message(
+        self,
+        actuator_name: str,
+        volume: float,
+        message: bytes | bytearray,
+    ) -> None:
         """Perform a say action.
 
         Parameter
         ---------
         actuator_name: str
             The name of the say actuator.
+
+        volume: float
+            The volume gain parameter.
 
         message: bytes | bytearray
             The message to say.
@@ -201,6 +209,7 @@ class BaseSimulation(ABC):
         actuator = self._a_data.actuators.get(actuator_name, None)
 
         if actuator is not None:
+            actuator.gainprm[0] = volume
             actuator.ctrl = message
 
     def init(self) -> bool:
@@ -453,14 +462,14 @@ class BaseSimulation(ABC):
                 # - 100 meter distance --> 99.8% packet loss
                 packet_loss_rate_distance = 0.5 * np.tanh(np.pi * a_sensor.distances / 50.0 - np.pi) + 0.5
 
-                msg_indices = cast(Sequence[int], np.nonzero(np.random.rand(n_msgs) > packet_loss_rate_distance)[0])  # cast to int sequence as mypy complains about not being able to use a numpy array element for indexing
+                other_msg_mask = [not s.startswith(agent.agent_id.prefix) for s in a_sensor.sources]
+                loss_msg_mask = np.random.rand(n_msgs) > packet_loss_rate_distance
+                msg_indices = cast(Sequence[int], np.nonzero(other_msg_mask & loss_msg_mask)[0])  # cast to int sequence as mypy complains about not being able to use a numpy array element for indexing
 
-                for idx in msg_indices:
-                    if a_sensor.sources[idx].startswith(agent.agent_id.prefix):
-                        # skip self messages
-                        continue
-
-                    agent_perceptions.append(HearPerception(a_sensor.messages[idx]))
+                # filter messages for perception
+                azimuths = cast(Sequence[int], np.trunc(np.degrees(np.atan2(a_sensor.origins[1, msg_indices], a_sensor.origins[0, msg_indices])), dtype=np.int64))  # cast to int sequence as mypy complains about type mismatch
+                filtered_messages = [a_sensor.messages[idx] for idx in msg_indices]
+                agent_perceptions.append(MicrophonePerception(a_sensor.name[prefix_length:], azimuths, filtered_messages))
 
             # ideal camera sensor-pipeline
             if gen_vision:

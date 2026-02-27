@@ -161,13 +161,13 @@ class JointStatePerception(Perception):
 
         super().__init__('JS')
 
-        self.joint_names: Sequence[str] = joint_names
+        self.joint_names: Final[Sequence[str]] = joint_names
         """The list of joint names."""
 
-        self.joint_axs: Sequence[float] = axs
+        self.joint_axs: Final[Sequence[float]] = axs
         """THe list of joint axis positions."""
 
-        self.joint_vxs: Sequence[float] = vxs
+        self.joint_vxs: Final[Sequence[float]] = vxs
         """The list of joint velocities."""
 
     def to_sexp(self) -> str:
@@ -430,27 +430,38 @@ class VisionPerception(Perception):
         return '(' + self.name + ' ' + ''.join(detections) + ')'
 
 
-class HearPerception(Perception):
-    """Hear perception."""
+class MicrophonePerception(Perception):
+    """Microphone perception."""
 
-    def __init__(self, message: bytes | bytearray) -> None:
-        """Construct a new hear perception.
+    def __init__(
+        self,
+        name: str,
+        azimuths: Sequence[int],
+        messages: Sequence[bytes | bytearray],
+    ) -> None:
+        """Construct a new microphone perception.
 
         Parameter
         ---------
-        message: bytes | bytearray
-            The detected message.
+        name: str
+            The sensor / perceptor name.
+
+        message: Sequence[bytes | bytearray]
+            The detected messages.
         """
 
-        super().__init__('hear')
+        super().__init__(name)
 
-        self.message: Final[bytes | bytearray] = message
-        """The message to send."""
+        self.azimuths: Final[Sequence[int]] = azimuths
+        """The azimuth (horizontal) angles to the origins of the detected sound sources."""
+
+        self.messages: Final[Sequence[bytes | bytearray]] = messages
+        """The detected messages."""
 
     def to_sexp(self) -> str:
         """Return a symbolic expression representing this perception.
 
-        Expression format: (hear <message>)
+        Expression format: (MIC <name> +(<azimuth> <message>))
         """
 
-        return f'(hear {base64.b64encode(self.message).decode()})'
+        return '(MIC ' + self.name + ' ' + ''.join(f'({azimuth} {base64.b64encode(msg).decode()})' for azimuth, msg in zip(self.azimuths, self.messages, strict=False)) + ')'

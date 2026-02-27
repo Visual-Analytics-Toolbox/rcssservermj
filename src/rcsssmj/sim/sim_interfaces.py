@@ -39,13 +39,21 @@ class PSimActionInterface(Protocol):
             The torque of the actuator.
         """
 
-    def say_message(self, actuator_name: str, message: bytes | bytearray) -> None:
+    def say_message(
+        self,
+        actuator_name: str,
+        volume: float,
+        message: bytes | bytearray,
+    ) -> None:
         """Perform a say action.
 
         Parameter
         ---------
         actuator_name: str
             The name of the say actuator.
+
+        volume: float
+            The volume gain parameter.
 
         message: bytes | bytearray
             The message to say.
