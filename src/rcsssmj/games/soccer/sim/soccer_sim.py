@@ -532,7 +532,7 @@ class SoccerSimulation(BaseSimulation):
         theta = beam_pose[2] + theta_shift
         quat = quat_from_axis_angle((0, 0, 1), theta)
 
-        logger.debug('Beam team #%d player #%02d to (%.3f, %.3f, %.3f)', agent_id.team_id, agent_id.player_no, pos[0], pos[1], degrees(theta))
+        # logger.debug('Beam team #%d player #%02d to (%.3f, %.3f, %.3f)', agent_id.team_id, agent_id.player_no, pos[0], pos[1], degrees(theta))
 
         player.place_at(pos, quat)
         player.init_joints()

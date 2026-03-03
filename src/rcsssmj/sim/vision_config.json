@@ -1,0 +1,13 @@
+{
+    "fov_h": 60.0,
+    "fov_v": 60.0,
+    "dist_sigma": 0.01,
+    "angle_sigma": 0.5,
+    "fn_rate_visible": 0.01,
+    "fn_rate_partial": 0.50,
+    "fp_rate": 0.02,
+    "confusion_rate": 0.05,
+    "send_unique_class_names": true,
+    "decimal_position_precision": 2,
+    "max_number_of_false_positives": 5
+}

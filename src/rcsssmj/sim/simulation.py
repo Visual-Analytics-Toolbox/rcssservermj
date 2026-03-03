@@ -7,6 +7,8 @@ import mujoco
 import numpy as np
 
 from rcsssmj.resources.spec_provider import ModelSpecProvider
+from rcsssmj.sim.vision_engine import v_compile, v_forward, v_recompile
+from rcsssmj.sim.vision_generator import OfficialVisionGenerator
 from rcsssmj.sim.actions import SimAction
 from rcsssmj.sim.agent_id import AgentID
 from rcsssmj.sim.agent_params import PAgentParameter
@@ -28,6 +30,15 @@ from rcsssmj.sim.perceptions import (
 from rcsssmj.sim.sim_agent import SimAgent
 from rcsssmj.sim.sim_object import SimObject
 from rcsssmj.sim.state_info import SceneGraph, SimStateInformation
+
+# file handler
+fh = logging.FileHandler(filename='debug.log', mode='w')
+fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s', '%Y-%m-%d %H:%M:%S'))
+fh.setLevel(logging.DEBUG)
+
+# configure logging
+logging.basicConfig(handlers=[fh], level=logging.DEBUG)
+# ---------- LOGGING CONFIG ----------
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +90,9 @@ class BaseSimulation(ABC):
 
         self._world_markers: Sequence[tuple[str, str]] = []
         """The sequence of world markers used for generating vision perceptions."""
+
+        self._marker_radii: dict[str, float] = {}
+        """Cache with the physical radii of each marker."""
 
     @property
     def frame_id(self) -> int:
@@ -199,6 +213,28 @@ class BaseSimulation(ABC):
 
         # extract visible object markers of world
         self._world_markers = [(site.name, site.name[0].upper()) for site in self._mj_spec.sites if site.name.endswith('-vismarker')]
+        self._v_data = v_compile(self._mj_spec)
+
+        # --- VISION CONFIGURATION SYSTEM ---
+        import json
+        import os
+
+        config_path = 'vision_config.json'
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                config_params = json.load(f)
+            
+            # The ** unpacks the JSON dictionary directly into the constructor arguments!
+            self._vision_generator = OfficialVisionGenerator(**config_params)
+            logger.info(f"Loaded vision configuration from '{config_path}'.")
+        else:
+            # Safe fallback: uses default values if the file does not exist
+            self._vision_generator = OfficialVisionGenerator()
+            logger.warning(f"Vision config file '{config_path}' not found. Using default parameters.")
+        # ------------------------------------
+        
+        # compute marker radii cache
+        self._update_marker_radii()
 
         # reset frame id
         self._frame_id = 0
@@ -323,6 +359,12 @@ class BaseSimulation(ABC):
         # rebind objects
         for obj in self.sim_objects:
             obj.bind(self._mj_model, self._mj_data)
+        
+        # recompile vision sensors
+        self._v_data = v_recompile(self._mj_spec, self._v_data)
+        
+        # recompute marker radii cache
+        self._update_marker_radii()
 
     def step(self, agent_actions: Sequence[SimAction], monitor_commands: Sequence[MonitorCommand]) -> None:
         """Perform a simulation step.
@@ -424,11 +466,19 @@ class BaseSimulation(ABC):
             # extract visible object positions
             n_markers = len(obj_markers)
             obj_pos = np.zeros((3, n_markers), dtype=np.float64)
+            obj_radii = np.zeros(n_markers, dtype=np.float64)
+
             for idx, site in enumerate(obj_markers):
-                obj_pos[:, idx] = self._mj_data.site(site[0]).xpos.astype(np.float64)
+                site_name = site[0]
+
+                obj_pos[:, idx] = self._mj_data.site(site_name).xpos.astype(np.float64)
+                obj_radii[idx] = self._marker_radii.get(site_name, 0.1)
+
+            v_forward(self._v_data, self._mj_data, agents, obj_pos, obj_radii, obj_markers, n_world_markers, True)
 
         # generate agent specific perceptions
         for agent in agents:
+
             joint_names: list[str] = []
             joint_axs: list[float] = []
             joint_vxs: list[float] = []
@@ -479,118 +529,31 @@ class BaseSimulation(ABC):
 
             # ideal camera sensor-pipeline
             if gen_vision:
-                # fetch camera sensor site
-                camera_site = self._mj_data.site(agent.agent_id.prefix + 'camera')
-
-                # If the camera site does not exist, skip vision processing
-                if camera_site is None:
-                    agent.set_perceptions(agent_perceptions)
-                    continue
-
-                # fetch pose of camera site of robot model
-                camera_pos = camera_site.xpos.astype(np.float64)
-                camera_rot = camera_site.xmat.astype(np.float64).reshape((3, 3))
-
-                # transform object world positions into the camera reference frame
-                local_obj_pos = np.matmul(camera_rot.T, obj_pos - camera_pos[:, np.newaxis])
-
-                # Cartesian to polar conversion
-                azimuths = np.degrees(np.atan2(local_obj_pos[1], local_obj_pos[0]))
-                distances = np.linalg.norm(local_obj_pos, axis=0)
-
-                z_ratio = local_obj_pos[2] / np.maximum(distances, 1e-6)
-                z_ratio = np.clip(z_ratio, -1.0, 1.0) # prevent division and floating point errors
-                elevations = np.degrees(np.asin(z_ratio))
-
-                # field-of-view half-ranges
-                half_horizontal_range = 60
-                half_vertical_range = 60
-
-                # boolean visibility mask
-                obj_visibility = (
-                    (azimuths >= -half_horizontal_range) &
-                    (azimuths <= half_horizontal_range) &
-                    (elevations >= -half_vertical_range) &
-                    (elevations <= half_vertical_range)
-                )
-
-                n_visible = np.count_nonzero(obj_visibility)
-                obj_detections: list[PObjectDetection] = []
-
-                # --- NOISE GENERATION ---
-                if n_visible > 0:
-
-                    noisy_dists = distances.copy()
-                    noisy_azis = azimuths.copy()
-                    noisy_eles = elevations.copy()
-
-                    # noise parameters
-                    sigma_dist_factor = 0.01
-                    sigma_angle_factor = 0.5
-
-                    # gather visible values
-                    vis_real_dists = distances[obj_visibility]
-                    vis_azis = azimuths[obj_visibility]
-                    vis_eles = elevations[obj_visibility]
-
-                    # vectorized Gaussian noise
-                    dist_noise = np.random.normal(0.0, vis_real_dists * sigma_dist_factor, n_visible)
-                    azi_noise = np.random.normal(0.0, sigma_angle_factor, n_visible)
-                    ele_noise = np.random.normal(0.0, sigma_angle_factor, n_visible)
-
-                    # apply noise
-                    noisy_dists[obj_visibility] = np.maximum(0.0, vis_real_dists + dist_noise)
-                    noisy_azis[obj_visibility] = vis_azis + azi_noise
-                    noisy_eles[obj_visibility] = vis_eles + ele_noise
-
-                    # --- DETECTION ASSEMBLY ---
-                    def create_det(idx):
-                        return ObjectDetection(
-                            obj_markers[idx][0],
-                            trunc2(noisy_azis[idx]),
-                            trunc2(noisy_eles[idx]),
-                            trunc2(noisy_dists[idx])
-                        )
-
-                    # static world objects
-                    for i in range(n_world_markers):
-                        if obj_visibility[i]:
-                            obj_detections.append(create_det(i))
-
-                    # player markers
-                    idx_cursor = n_world_markers
-
-                    for player in agents:
-                        # skips if the agent is itself
-                        if player.agent_id == agent.agent_id:
-                            idx_cursor += len(player.markers)
-                            continue
-
-                        n_player_parts = len(player.markers)
-                        end_cursor = idx_cursor + n_player_parts
-
-                        # slice visibility mask
-                        player_mask = obj_visibility[idx_cursor:end_cursor]
-
-                        if np.any(player_mask):
-                            visible_indices = np.flatnonzero(player_mask) + idx_cursor
-                            player_parts = [create_det(k) for k in visible_indices]
-
-                            obj_detections.append(
-                                AgentDetection(
-                                    'P',
-                                    player.team_name,
-                                    player.agent_id.player_no,
-                                    player_parts
-                                )
-                            )
-
-                        idx_cursor = end_cursor
-
-                agent_perceptions.append(VisionPerception('See', obj_detections))
+                # retrieve the populated camera sensor
+                v_sensor = self._v_data.sensors.get(agent.agent_id.prefix + 'camera', None)
+                
+                vision_perception = self._vision_generator.generate(v_sensor, agent, agents)
+                agent_perceptions.append(vision_perception)
 
             # forward generated perceptions to agent instance
             agent.set_perceptions(agent_perceptions)
+
+    def _update_marker_radii(self) -> None:
+        """Calculate and cache the physical size of all active markers."""
+        self._marker_radii.clear()
+        
+        all_markers = list(self._world_markers)
+        for agent in self.sim_agents:
+            all_markers.extend(agent.markers)
+            
+        for site_name, _ in all_markers:
+            try:
+                site_id = mujoco.mj_name2id(self._mj_model, mujoco.mjtObj.mjOBJ_SITE, site_name)
+                body_id = self._mj_model.site_bodyid[site_id]
+                self._marker_radii[site_name] = self._mj_model.body_rbound[body_id]
+            except Exception:
+                # Security fallback (10cm) if something fails
+                self._marker_radii[site_name] = 0.1
 
     def generate_state_information(self) -> list[SimStateInformation]:
         """Generate simulation state information for updating monitor instances."""
