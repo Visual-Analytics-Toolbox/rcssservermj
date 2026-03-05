@@ -113,19 +113,21 @@ class OfficialVisionGenerator(VisionGenerator):
         obj_detections = []
         
         # Determine how many false positives occur in this frame based on probability
-        n_fake_positives = np.sum(np.random.randint(1, 1001, 5) <= self.fp_rate*1000)
+        n_false_positives = np.sum(
+            np.random.random(self.max_number_of_false_positives) < self.fp_rate
+        )
 
         # If no hallucination triggered, return an empty list immediately
-        if n_fake_positives == 0:
+        if n_false_positives == 0:
             return obj_detections
 
         # Generate random polar coordinates within the FOV limits and a valid distance range (0.5m to 15m)
-        fake_azis = np.random.uniform(-self.fov_h, self.fov_h, n_fake_positives)
-        fake_eles = np.random.uniform(-self.fov_v, self.fov_v, n_fake_positives)
-        fake_dists = np.random.uniform(0.5, 15.0, n_fake_positives)
+        fake_azis = np.random.uniform(-self.fov_h, self.fov_h, n_false_positives)
+        fake_eles = np.random.uniform(-self.fov_v, self.fov_v, n_false_positives)
+        fake_dists = np.random.uniform(0.5, 15.0, n_false_positives)
         
         # Randomly pick the classes/names for these fake objects
-        fake_names = np.random.choice(all_world_names, size=n_fake_positives)
+        fake_names = np.random.choice(all_world_names, size=n_false_positives)
         
         for name, azi, ele, dist in zip(fake_names, fake_azis, fake_eles, fake_dists):
 
