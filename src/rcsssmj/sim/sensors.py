@@ -7,6 +7,7 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
 
+
 class CustomSensor:
     """Base class for custom sensors."""
 
@@ -55,11 +56,12 @@ class Microphone(CustomSensor):
         self.volumes: NDArray[np.float64] = np.zeros(0, dtype=np.float64)
         """The volumes at which the individual messages arrived."""
 
-        self.origins: NDArray[np.float32] = np.zeros((3, 0), dtype=np.float64)
+        self.origins: NDArray[np.float64] = np.zeros((3, 0), dtype=np.float64)
         """The sensor local origins of the sound transmissions."""
 
         self.distances: NDArray[np.float64] = np.zeros(0, dtype=np.float64)
         """The distances to the audio origins."""
+
 
 class Camera(CustomSensor):
     """A vision camera sensor."""
