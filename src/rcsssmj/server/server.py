@@ -281,6 +281,7 @@ class SimServer(Generic[S]):
 
             # collect monitor commands
             monitor_commands = self._collect_commands(active_monitors)
+            monitor_commands.extend(self._collect_commands(monitors_to_remove))
 
             # progress simulation
             self.sim.step(monitor_commands)
@@ -326,6 +327,7 @@ class SimServer(Generic[S]):
 
             # collect monitor commands
             monitor_commands = self._collect_commands(active_monitors)
+            monitor_commands.extend(self._collect_commands(monitors_to_remove))
 
             # progress simulation
             self.sim.step(monitor_commands)
