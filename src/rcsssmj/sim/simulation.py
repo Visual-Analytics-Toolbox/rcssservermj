@@ -516,28 +516,28 @@ class BaseSimulation(ABC):
                 agent_perceptions.append(JointStatePerception(joint_names, trunc2_vec(np.degrees(joint_axs)), trunc2_vec(np.degrees(joint_vxs))))
 
             # audio perception
-            # a_sensor = self._a_data.sensors.get(agent.agent_id.prefix + 'hear', None)
-            # if a_sensor is not None:
-            #     n_msgs = len(a_sensor.messages)
+            a_sensor = self._a_data.sensors.get(agent.agent_id.prefix + 'hear', None)
+            if a_sensor is not None and a_sensor.messages:
+                n_msgs = len(a_sensor.messages)
 
-            #     # TODO: Introduce loss probability based on message volume and ambient volume.
-            #     # some distance based packet loss probability
-            #     # -  25 meter distance -->  4.1% packet loss
-            #     # -  40 meter distance --> 22.2% packet loss
-            #     # -  50 meter distance --> 50.0% packet loss
-            #     # -  60 meter distance --> 77.8% packet loss
-            #     # -  75 meter distance --> 95.9% packet loss
-            #     # - 100 meter distance --> 99.8% packet loss
-            #     packet_loss_rate_distance = 0.5 * np.tanh(np.pi * a_sensor.distances / 50.0 - np.pi) + 0.5
+                # TODO: Introduce loss probability based on message volume and ambient volume.
+                # some distance based packet loss probability
+                # -  25 meter distance -->  4.1% packet loss
+                # -  40 meter distance --> 22.2% packet loss
+                # -  50 meter distance --> 50.0% packet loss
+                # -  60 meter distance --> 77.8% packet loss
+                # -  75 meter distance --> 95.9% packet loss
+                # - 100 meter distance --> 99.8% packet loss
+                packet_loss_rate_distance = 0.5 * np.tanh(np.pi * a_sensor.distances / 50.0 - np.pi) + 0.5
 
-            #     other_msg_mask = [not s.startswith(agent.agent_id.prefix) for s in a_sensor.sources]
-            #     loss_msg_mask = np.random.rand(n_msgs) > packet_loss_rate_distance
-            #     msg_indices = cast(Sequence[int], np.nonzero(other_msg_mask & loss_msg_mask)[0])  # cast to int sequence as mypy complains about not being able to use a numpy array element for indexing
+                other_msg_mask = [not s.startswith(agent.agent_id.prefix) for s in a_sensor.sources]
+                loss_msg_mask = np.random.rand(n_msgs) > packet_loss_rate_distance
+                msg_indices = cast(Sequence[int], np.nonzero(other_msg_mask & loss_msg_mask)[0])  # cast to int sequence as mypy complains about not being able to use a numpy array element for indexing
 
-            #     # filter messages for perception
-            #     azimuths = cast(Sequence[int], np.trunc(np.degrees(np.atan2(a_sensor.origins[1, msg_indices], a_sensor.origins[0, msg_indices])), dtype=np.int64))  # cast to int sequence as mypy complains about type mismatch
-            #     filtered_messages = [a_sensor.messages[idx] for idx in msg_indices]
-            #     agent_perceptions.append(MicrophonePerception(a_sensor.name[prefix_length:], azimuths, filtered_messages))
+                # filter messages for perception
+                azimuths = cast(Sequence[int], np.trunc(np.degrees(np.atan2(a_sensor.origins[1, msg_indices], a_sensor.origins[0, msg_indices])), dtype=np.int64))  # cast to int sequence as mypy complains about type mismatch
+                filtered_messages = [a_sensor.messages[idx] for idx in msg_indices]
+                agent_perceptions.append(MicrophonePerception(a_sensor.name[prefix_length:], azimuths, filtered_messages))
 
             # ideal camera sensor-pipeline
             if gen_vision:
