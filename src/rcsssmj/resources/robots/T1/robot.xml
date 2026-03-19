@@ -78,6 +78,7 @@
   <worldbody>
     <body name="torso" pos="0 0 0.6735">
       <site name="torso" pos="0.0 0.0 0.0"/>
+      <site name="torso_imu" pos="0 0 0"/>
       <!-- <site name="torso-vismarker" pos="0 0 0"/> -->
       <inertial pos="0.0551365 -1.42058e-06 0.105062" quat="0.99996 1.40561e-05 -0.00899532 -1.39249e-05" mass="11.7" diaginertia="0.0915404 0.0767787 0.0556055"/>
       <geom class="visual" material="team" mesh="Trunk"/>
@@ -351,8 +352,8 @@
     <framequat name="torso_quat" objtype="site" objname="torso"/><!-- Used for ground-truth perception of robot orientation.-->
     <framepos name="torso_pos" objtype="site" objname="torso"/><!-- Used for ground-truth perception of robot position.-->
 
-    <gyro name="torso_gyro" site="torso"/>
-    <accelerometer name="torso_acc" site="torso"/>
+    <gyro name="torso_imu_gyro" site="torso_imu"/>
+    <accelerometer name="torso_imu_acc" site="torso_imu"/>
 
     <jointpos name="q_hj1" joint="AAHead_yaw"/>
     <jointpos name="q_hj2" joint="Head_pitch"/>

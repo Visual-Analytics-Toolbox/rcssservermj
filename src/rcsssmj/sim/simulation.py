@@ -8,6 +8,7 @@ import numpy as np
 
 from rcsssmj.resources.spec_provider import ModelSpecProvider
 from rcsssmj.sim.audio_engine import a_compile, a_forward, a_recompile, a_step
+from rcsssmj.sim.imu_engine import i_compile, i_recompile, i_step
 from rcsssmj.sim.commands import MonitorCommand
 from rcsssmj.sim.perceptions import (
     AccelerometerPerception,
@@ -30,6 +31,7 @@ from rcsssmj.sim.state_info import SceneGraph, SimStateInformation
 
 if TYPE_CHECKING:
     from rcsssmj.sim.audio_data import AudioData
+    from rcsssmj.sim.imu_data import ImuData
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +83,9 @@ class BaseSimulation(ABC):
 
         self._a_data: AudioData = None  # type: ignore
         """The audio engine data."""
+
+        self._i_data: ImuData = None
+        """ The IMU engine data."""
 
         self._world_markers: Sequence[tuple[str, str]] = []
         """The sequence of world markers used for generating vision perceptions."""
@@ -228,8 +233,9 @@ class BaseSimulation(ABC):
         # calculate forward kinematics / dynamics of newly created world
         mujoco.mj_forward(self._mj_model, self._mj_data)
 
-        # prepare initial audio simulation data
+        # prepare initial audio and IMU simulation data
         self._a_data = a_compile(self._mj_spec)
+        self._i_data = i_compile(self._mj_spec)
 
         # extract visible object markers of world
         self._world_markers = [(site.name, site.name[:-10]) for site in self._mj_spec.sites if site.name.endswith('-vismarker')]
@@ -294,8 +300,9 @@ class BaseSimulation(ABC):
         # calculate forward kinematics / dynamics
         mujoco.mj_forward(self._mj_model, self._mj_data)
 
-        # recompile audio spec
+        # recompile audio and imu spec
         self._a_data = a_recompile(self._mj_spec, self._a_data)
+        self._i_data = i_recompile(self._mj_spec, self._i_data)
 
         # calculate audio information
         a_forward(self._a_data, self._mj_data)
@@ -319,8 +326,9 @@ class BaseSimulation(ABC):
         # progress simulation
         mujoco.mj_step(self._mj_model, self._mj_data, self.n_substeps)
 
-        # progress audio simulation
+        # progress audio and IMU simulation
         a_step(self._a_data, self._mj_data)
+        i_step(self._i_data, self._mj_data, self._mj_model)
 
         # post-step hook
         self._post_step(monitor_commands)
@@ -406,6 +414,8 @@ class BaseSimulation(ABC):
 
             prefix_length = len(agent.agent_id.prefix)
 
+            i_sensor = self._i_data.sensors.get(agent.agent_id.prefix + 'torso', None)
+
             for sensor_spec in agent.spec.sensors:
                 sensor = self._mj_data.sensor(sensor_spec.name)
                 sensor_name = sensor_spec.name[prefix_length:]
@@ -418,20 +428,23 @@ class BaseSimulation(ABC):
                     joint_vxs.append(sensor.data[0])
 
                 elif sensor_spec.type == mujoco.mjtSensor.mjSENS_GYRO:
-                    rvx, rvy, rvz = trunc2_vec(np.degrees(sensor.data[0:3]))
-                    agent_perceptions.append(GyroPerception(sensor_name, rvx, rvy, rvz))
+                    if i_sensor is not None:
+                        rvx, rvy, rvz = trunc2_vec(np.degrees(i_sensor.noisy_gyro))
+                        agent_perceptions.append(GyroPerception(sensor_name, rvx, rvy, rvz))
 
                 elif sensor_spec.type == mujoco.mjtSensor.mjSENS_ACCELEROMETER:
-                    ax, ay, az = trunc2_vec(sensor.data[0:3])
-                    agent_perceptions.append(AccelerometerPerception(sensor_name, ax, ay, az))
+                    if i_sensor is not None:
+                        ax, ay, az = trunc2_vec(i_sensor.noisy_accel)
+                        agent_perceptions.append(AccelerometerPerception(sensor_name, ax, ay, az))
 
                 elif sensor_spec.type == mujoco.mjtSensor.mjSENS_TOUCH:
                     active = int(sensor.data[0])
                     agent_perceptions.append(TouchPerception(sensor_name, active))
 
                 elif sensor_spec.type == mujoco.mjtSensor.mjSENS_FRAMEQUAT:
-                    qw, qx, qy, qz = trunc3_vec(sensor.data[0:4])
-                    agent_perceptions.append(OrientationPerception(sensor_name, qw, qx, qy, qz))
+                    if i_sensor is not None:
+                        qw, qx, qy, qz = trunc3_vec(i_sensor.q_est)
+                        agent_perceptions.append(OrientationPerception(sensor_name, qw, qx, qy, qz))
 
                 elif sensor_spec.type == mujoco.mjtSensor.mjSENS_FRAMEPOS:
                     px, py, pz = trunc3_vec(sensor.data[0:3])

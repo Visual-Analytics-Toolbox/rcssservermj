@@ -61,3 +61,30 @@ class Microphone(CustomSensor):
 
         self.distances: NDArray[np.float64] = np.zeros(0, dtype=np.float64)
         """The distances to the audio origins."""
+
+class T1IMUSensor(CustomSensor):
+    """A realistic IMU sensor representing the HiPNUC HI13R4 from Booster T1."""
+
+    def __init__(self, name: str, site: str) -> None:
+        """Construct a new IMU sensor.
+
+        Parameter
+        ---------
+        name: str
+            The name of the sensor.
+
+        site: str
+            The mujoco site name associated with this sensor.
+        """
+        super().__init__(name, site)
+
+        # Current state of the Estimated Orientation (Quarternion: w, x, y, z)
+        self.q_est: NDArray[np.float64] = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
+
+        # Accumulators for Thermal/Time Drift
+        self.gyro_bias: NDArray[np.float64] = np.zeros(3, dtype=np.float64)
+        self.accel_bias: NDArray[np.float64] = np.zeros(3, dtype=np.float64)
+
+        # Latest generated noisy data
+        self.noisy_gyro: NDArray[np.float64] = np.zeros(3, dtype=np.float64)
+        self.noisy_accel: NDArray[np.float64] = np.zeros(3, dtype=np.float64)
