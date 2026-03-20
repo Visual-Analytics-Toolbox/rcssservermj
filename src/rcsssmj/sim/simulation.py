@@ -1,4 +1,6 @@
+import json
 import logging
+import os
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
 from typing import TYPE_CHECKING, Any, Final, cast
@@ -8,36 +10,23 @@ import numpy as np
 
 from rcsssmj.resources.spec_provider import ModelSpecProvider
 from rcsssmj.sim.audio_engine import a_compile, a_forward, a_recompile, a_step
-from rcsssmj.sim.vision_engine import v_compile, v_forward, v_recompile
-from rcsssmj.sim.vision_generator import OfficialVisionGenerator
 from rcsssmj.sim.commands import MonitorCommand
 from rcsssmj.sim.perceptions import (
     AccelerometerPerception,
-    AgentDetection,
     GyroPerception,
     JointStatePerception,
     MicrophonePerception,
-    ObjectDetection,
     OrientationPerception,
     Perception,
-    PObjectDetection,
     PositionPerception,
     TimePerception,
     TouchPerception,
-    VisionPerception,
 )
 from rcsssmj.sim.sim_agent import SimAgent
 from rcsssmj.sim.sim_object import SimObject
 from rcsssmj.sim.state_info import SceneGraph, SimStateInformation
-
-# file handler
-fh = logging.FileHandler(filename='debug.log', mode='w')
-fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s', '%Y-%m-%d %H:%M:%S'))
-fh.setLevel(logging.DEBUG)
-
-# configure logging
-logging.basicConfig(handlers=[fh], level=logging.DEBUG)
-# ---------- LOGGING CONFIG ----------
+from rcsssmj.sim.vision_engine import v_compile, v_recompile, v_step
+from rcsssmj.sim.vision_generator import OfficialVisionGenerator
 
 if TYPE_CHECKING:
     from rcsssmj.sim.audio_data import AudioData
@@ -48,14 +37,7 @@ logger = logging.getLogger(__name__)
 class BaseSimulation(ABC):
     """Base class for simulations."""
 
-    def __init__(
-        self,
-        *,
-        spec_provider: ModelSpecProvider | None = None,
-        n_substeps: int = 4,
-        vision_interval: int = 1,
-        vision_config_path: str | None = None
-    ) -> None:
+    def __init__(self, *, spec_provider: ModelSpecProvider | None = None, n_substeps: int = 4, vision_interval: int = 1, vision_config_path: str | None = None) -> None:
         """Construct a new simulation.
 
         Parameter
@@ -100,7 +82,7 @@ class BaseSimulation(ABC):
         self._marker_radii: dict[str, float] = {}
         """Cache with the physical radii of each marker."""
 
-        self.vision_config_path:str = vision_config_path
+        self.vision_config_path: Final[str | None] = vision_config_path
 
     @property
     def frame_id(self) -> int:
@@ -249,42 +231,37 @@ class BaseSimulation(ABC):
         self._a_data = a_compile(self._mj_spec)
 
         # extract visible object markers of world
-        self._world_markers = [(site.name, site.name[0].upper()) for site in self._mj_spec.sites if site.name.endswith('-vismarker')]
-        self._v_data = v_compile(self._mj_spec)
-
-        # --- VISION CONFIGURATION SYSTEM ---
-        import json
-        import os
+        self._v_data = v_compile(self._mj_spec, list(self.sim_agents))
 
         config_to_load = None
-        
+
         # 1. In case the user provided a vision config file path via command line argument, we try to load it
         if self.vision_config_path and os.path.exists(self.vision_config_path):
             config_to_load = self.vision_config_path
-            logger.info(f"Loaded CUSTOM vision configuration from '{config_to_load}'.")
+            logger.info("Loaded CUSTOM vision configuration from '%s'.", config_to_load)
         elif self.vision_config_path:
-            logger.error(f"Provided vision config file '{self.vision_config_path}' not found! Falling back to default.")
+            logger.error("Provided vision config file '%s' not found! Falling back to default.", self.vision_config_path)
 
         # 2. If there is no user-provided config file, it's loaded the default configuration file
         if not config_to_load:
             package_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             default_config_path = os.path.join(package_dir, 'configs', 'vision_config.json')
-            
+
             if os.path.exists(default_config_path):
                 config_to_load = default_config_path
-                logger.info(f"Loaded DEFAULT vision configuration from '{config_to_load}'.")
+                logger.info("Loaded DEFAULT vision configuration from '%s'.", config_to_load)
 
         # 3. Applies the configuration to the vision generator
         if config_to_load:
-            with open(config_to_load, 'r') as f:
+            with open(config_to_load) as f:
                 config_params = json.load(f)
             self._vision_generator = OfficialVisionGenerator(**config_params)
         else:
             # Fallback to default vision generartor with hardcoded paramenters
             self._vision_generator = OfficialVisionGenerator()
-            logger.warning("Vision config files not found. Using default parameters from source code.")
+            logger.warning('Vision config files not found. Using default parameters from source code.')
         # ----------------------------------------
-        
+
         # compute marker radii cache
         self._update_marker_radii()
 
@@ -357,10 +334,10 @@ class BaseSimulation(ABC):
         # rebind objects
         for obj in self.sim_objects:
             obj.bind(self._mj_model, self._mj_data)
-        
+
         # recompile vision sensors
-        self._v_data = v_recompile(self._mj_spec, self._v_data)
-        
+        self._v_data = v_recompile(self._mj_spec, self._v_data, list(self.sim_agents))
+
         # recompute marker radii cache
         self._update_marker_radii()
 
@@ -445,28 +422,10 @@ class BaseSimulation(ABC):
         game_state_perception = self._generate_game_state_perception()
 
         if gen_vision:
-            # collect visible markers
-            n_world_markers = len(self._world_markers)
-            obj_markers = list(self._world_markers)
-            for player in agents:
-                obj_markers.extend(player.markers)
-
-            # extract visible object positions
-            n_markers = len(obj_markers)
-            obj_pos = np.zeros((3, n_markers), dtype=np.float64)
-            obj_radii = np.zeros(n_markers, dtype=np.float64)
-
-            for idx, site in enumerate(obj_markers):
-                site_name = site[0]
-
-                obj_pos[:, idx] = self._mj_data.site(site_name).xpos.astype(np.float64)
-                obj_radii[idx] = self._marker_radii.get(site_name, 0.1)
-
-            v_forward(self._v_data, self._mj_data, agents, obj_pos, obj_radii, obj_markers, n_world_markers, True)
+            v_step(self._v_data, self._mj_model, self._mj_data, agents, True)
 
         # generate agent specific perceptions
         for agent in agents:
-
             joint_names: list[str] = []
             joint_axs: list[float] = []
             joint_vxs: list[float] = []
@@ -532,20 +491,21 @@ class BaseSimulation(ABC):
 
                 other_msg_mask = [not s.startswith(agent.agent_id.prefix) for s in a_sensor.sources]
                 loss_msg_mask = np.random.rand(n_msgs) > packet_loss_rate_distance
-                msg_indices = cast(Sequence[int], np.nonzero(other_msg_mask & loss_msg_mask)[0])  # cast to int sequence as mypy complains about not being able to use a numpy array element for indexing
+                msg_indices = cast('Sequence[int]', np.nonzero(other_msg_mask & loss_msg_mask)[0])  # cast to int sequence as mypy complains about not being able to use a numpy array element for indexing
 
                 # filter messages for perception
-                azimuths = cast(Sequence[int], np.trunc(np.degrees(np.atan2(a_sensor.origins[1, msg_indices], a_sensor.origins[0, msg_indices])), dtype=np.int64))  # cast to int sequence as mypy complains about type mismatch
+                azimuths = cast('Sequence[int]', np.trunc(np.degrees(np.atan2(a_sensor.origins[1, msg_indices], a_sensor.origins[0, msg_indices])), dtype=np.int64))  # cast to int sequence as mypy complains about type mismatch
                 filtered_messages = [a_sensor.messages[idx] for idx in msg_indices]
                 agent_perceptions.append(MicrophonePerception(a_sensor.name[prefix_length:], azimuths, filtered_messages))
 
             # ideal camera sensor-pipeline
             if gen_vision:
-                # retrieve the populated camera sensor
-                v_sensor = self._v_data.sensors.get(agent.agent_id.prefix + 'camera', None)
-                
-                vision_perception = self._vision_generator.generate(v_sensor, agent, agents)
-                agent_perceptions.append(vision_perception)
+                camera_site_name = agent.agent_id.prefix + 'camera'
+                cam = self._v_data.sensors.get(camera_site_name, None)
+
+                if cam is not None:
+                    vision_perception = self._vision_generator.generate(cam, agent, agents)
+                    agent_perceptions.append(vision_perception)
 
             # forward generated perceptions to agent instance
             agent.set_perceptions(agent_perceptions)
@@ -553,17 +513,17 @@ class BaseSimulation(ABC):
     def _update_marker_radii(self) -> None:
         """Calculate and cache the physical size of all active markers."""
         self._marker_radii.clear()
-        
+
         all_markers = list(self._world_markers)
         for agent in self.sim_agents:
             all_markers.extend(agent.markers)
-            
+
         for site_name, _ in all_markers:
             try:
                 site_id = mujoco.mj_name2id(self._mj_model, mujoco.mjtObj.mjOBJ_SITE, site_name)
                 body_id = self._mj_model.site_bodyid[site_id]
                 self._marker_radii[site_name] = self._mj_model.body_rbound[body_id]
-            except Exception:
+            except Exception:  # noqa: BLE001
                 # Security fallback (10cm) if something fails
                 self._marker_radii[site_name] = 0.1
 

@@ -83,6 +83,6 @@ class Camera(CustomSensor):
 
         self.occlusion_states: NDArray[np.int8] = np.zeros(0, dtype=np.int8)
         """Flags indicating the occluded state from this camera's perspective."""
-        
+
         self.owner_ids: NDArray[np.int_] = np.zeros(0, dtype=np.int_)
         """IDs indicating if the object belongs to the world (-1) or to a specific agent."""

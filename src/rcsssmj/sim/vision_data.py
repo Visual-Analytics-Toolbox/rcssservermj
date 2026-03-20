@@ -1,9 +1,20 @@
 from collections.abc import Mapping
+
+import numpy as np
+
 from rcsssmj.sim.sensors import Camera
 
-class VisionData:
-    """Vision engine state data."""
 
-    def __init__(self, sensors: Mapping[str, Camera]) -> None:
-        self.sensors: Mapping[str, Camera] = sensors
-        """The list of known camera sensors."""
+class VisionData:
+    """Encapsulates all necessary data for the vision pipeline."""
+
+    def __init__(self, sensors: Mapping[str, Camera], marker_sites: list[str], marker_names: list[str], owner_ids: np.ndarray, n_world_markers: int) -> None:
+        self.sensors = sensors
+        self.marker_sites = marker_sites
+        self.marker_names = marker_names
+        self.owner_ids = owner_ids
+        self.n_world_markers = n_world_markers
+
+        # Pré-alocação da memória para as posições 3D de todos os marcadores
+        n_markers = len(marker_sites)
+        self.obj_pos: np.ndarray = np.zeros((3, n_markers), dtype=np.float64)
