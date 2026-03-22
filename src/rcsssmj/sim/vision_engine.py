@@ -1,4 +1,3 @@
-from enum import IntEnum
 from typing import Any
 
 import mujoco
@@ -6,12 +5,6 @@ import numpy as np
 
 from rcsssmj.sim.sensors import Camera
 from rcsssmj.sim.vision_data import VisionData
-
-
-class OcclusionState(IntEnum):
-    NONE = 0
-    PARTIAL = 1
-    FULL = 2
 
 
 def v_compile(mj_spec: Any, agents: list) -> VisionData:
@@ -32,7 +25,7 @@ def v_compile(mj_spec: Any, agents: list) -> VisionData:
 
     n_markers = len(obj_markers)
     marker_sites = [m[0] for m in obj_markers]
-    marker_names = [m[1] for m in obj_markers]
+    marker_names = np.array([m[1] for m in obj_markers], dtype=str)
 
     # Prepare the "owners" mask
     owner_ids = np.full(n_markers, -1, dtype=int)
@@ -77,13 +70,14 @@ def v_step(v_data: VisionData, mj_model: Any, mj_data: Any, agents: list, check_
         z_ratio = np.clip(local_obj_pos[2] / np.maximum(distances, 1e-6), -1.0, 1.0)
         elevations = np.degrees(np.asin(z_ratio))
 
-        occlusion_states = np.full(n_markers, OcclusionState.NONE.value, dtype=np.int8)
+        is_occluded_mask = np.full(n_markers, False, dtype=np.bool_)
 
         # --- NATIVE MUJOCO RAYCASTING ---
         if check_occlusion:
             observer_prefix = agent.agent_id.prefix
             geomid_arr = np.zeros(1, dtype=np.int32)
 
+            # Test occlusion for each world object (the Target)
             for i in range(n_markers):
                 target_owner = v_data.owner_ids[i]
                 target_name = v_data.marker_names[i]
@@ -95,50 +89,56 @@ def v_step(v_data: VisionData, mj_model: Any, mj_data: Any, agents: list, check_
                     continue
 
                 ray_dir = ray_vec / ray_length
+
                 current_pnt = camera_pos.copy()
                 remaining_dist = ray_length
-                is_occluded = False
+                target_occluded = False
 
-                # Piercing Raycast Loop
-                while remaining_dist > 0.05:
+                # Piercing Raycast Loop: Ignore our own body parts
+                while remaining_dist > 0.05: # 5cm tolerance near the target center
                     dist = mujoco.mj_ray(mj_model, mj_data, current_pnt, ray_dir, geomgroup, 0, -1, geomid_arr)
                     hit_geom = geomid_arr[0]
 
                     if dist < 0 or dist >= remaining_dist - 0.05:
+                        # Clear path to target (or hit was behind the target)
                         break
 
                     if hit_geom != -1:
                         hit_body = mj_model.geom_bodyid[hit_geom]
                         hit_body_name = mujoco.mj_id2name(mj_model, mujoco.mjtObj.mjOBJ_BODY, hit_body)
 
+                        # 1. If we hit ourselves, pierce through and continue
                         if hit_body_name and hit_body_name.startswith(observer_prefix):
-                            advance = dist + 0.001
+                            advance = dist + 0.001 # Advance 1mm past the collision
                             current_pnt += ray_dir * advance
                             remaining_dist -= advance
                         else:
+                            # We hit something! Let's verify if it's the Target's own body
                             hit_target = False
+
+                            # Target is a Player
                             if target_owner != -1:
                                 target_prefix = agents[target_owner].agent_id.prefix
                                 if hit_body_name and hit_body_name.startswith(target_prefix):
                                     hit_target = True
-                            else:
-                                base_target_name = target_name.replace('-vismarker', '')
-                                if hit_body_name and base_target_name in hit_body_name:
-                                    hit_target = True
+                            # Target is a World Object (Ball, Goal)
+                            elif hit_body_name and target_name in hit_body_name:
+                                hit_target = True
 
                             if not hit_target:
-                                is_occluded = True
+                                target_occluded = True
                             break
                     else:
                         break
 
-                if is_occluded:
-                    occlusion_states[i] = OcclusionState.FULL.value
+                # Since mj_ray is binary (hit or not hit), we only use FULL occlusion now.
+                if target_occluded:
+                    is_occluded_mask[i] = True
 
         # --- SENSOR UPDATE ---
         cam.marker_names = v_data.marker_names
         cam.distances = distances
         cam.azimuths = azimuths
         cam.elevations = elevations
-        cam.occlusion_states = occlusion_states
+        cam.is_occluded = is_occluded_mask
         cam.owner_ids = v_data.owner_ids

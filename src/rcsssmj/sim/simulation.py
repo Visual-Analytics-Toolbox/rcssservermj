@@ -37,7 +37,15 @@ logger = logging.getLogger(__name__)
 class BaseSimulation(ABC):
     """Base class for simulations."""
 
-    def __init__(self, *, spec_provider: ModelSpecProvider | None = None, n_substeps: int = 4, vision_interval: int = 1, vision_config_path: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        spec_provider: ModelSpecProvider | None = None,
+        n_substeps: int = 4,
+        vision_interval: int = 1,
+        check_occlusion: bool = True,
+        vision_config_path: str | None = None
+    ) -> None:
         """Construct a new simulation.
 
         Parameter
@@ -61,6 +69,12 @@ class BaseSimulation(ABC):
         self.vision_interval: Final[int] = vision_interval
         """The interval (in simulation cycles) in which the vision perception is generated."""
 
+        self.check_occlusion: Final[bool] = check_occlusion
+        """ Whether to check for occlusions when generating vision perceptions."""
+
+        self.vision_config_path: Final[str | None] = vision_config_path
+        """ Optional path to a personalized vision configuration file"""
+
         self._frame_id: int = 0
         """The current simulation frame number."""
 
@@ -78,11 +92,6 @@ class BaseSimulation(ABC):
 
         self._world_markers: Sequence[tuple[str, str]] = []
         """The sequence of world markers used for generating vision perceptions."""
-
-        self._marker_radii: dict[str, float] = {}
-        """Cache with the physical radii of each marker."""
-
-        self.vision_config_path: Final[str | None] = vision_config_path
 
     @property
     def frame_id(self) -> int:
@@ -262,9 +271,6 @@ class BaseSimulation(ABC):
             logger.warning('Vision config files not found. Using default parameters from source code.')
         # ----------------------------------------
 
-        # compute marker radii cache
-        self._update_marker_radii()
-
         # reset frame id
         self._frame_id = 0
 
@@ -337,9 +343,6 @@ class BaseSimulation(ABC):
 
         # recompile vision sensors
         self._v_data = v_recompile(self._mj_spec, self._v_data, list(self.sim_agents))
-
-        # recompute marker radii cache
-        self._update_marker_radii()
 
     def step(self, monitor_commands: Sequence[MonitorCommand]) -> None:
         """Perform a simulation step.
@@ -422,7 +425,7 @@ class BaseSimulation(ABC):
         game_state_perception = self._generate_game_state_perception()
 
         if gen_vision:
-            v_step(self._v_data, self._mj_model, self._mj_data, agents, True)
+            v_step(self._v_data, self._mj_model, self._mj_data, agents, self.check_occlusion)
 
         # generate agent specific perceptions
         for agent in agents:
@@ -509,23 +512,6 @@ class BaseSimulation(ABC):
 
             # forward generated perceptions to agent instance
             agent.set_perceptions(agent_perceptions)
-
-    def _update_marker_radii(self) -> None:
-        """Calculate and cache the physical size of all active markers."""
-        self._marker_radii.clear()
-
-        all_markers = list(self._world_markers)
-        for agent in self.sim_agents:
-            all_markers.extend(agent.markers)
-
-        for site_name, _ in all_markers:
-            try:
-                site_id = mujoco.mj_name2id(self._mj_model, mujoco.mjtObj.mjOBJ_SITE, site_name)
-                body_id = self._mj_model.site_bodyid[site_id]
-                self._marker_radii[site_name] = self._mj_model.body_rbound[body_id]
-            except Exception:  # noqa: BLE001
-                # Security fallback (10cm) if something fails
-                self._marker_radii[site_name] = 0.1
 
     def generate_state_information(self) -> list[SimStateInformation]:
         """Generate simulation state information for updating monitor instances."""

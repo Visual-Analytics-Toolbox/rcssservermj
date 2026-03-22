@@ -6,7 +6,6 @@ import numpy as np
 
 from rcsssmj.sim.perceptions import AgentDetection, ObjectDetection, PObjectDetection, VisionPerception
 from rcsssmj.sim.sensors import Camera
-from rcsssmj.sim.vision_engine import OcclusionState
 
 
 class VisionGenerator(ABC):
@@ -26,11 +25,10 @@ class OfficialVisionGenerator(VisionGenerator):
         fov_v: float = 60.0,  # vertical field of view half-angle in degrees
         dist_sigma: float = 0.01,  # standard deviation for distance noise (it scales proportionally to the object's distance)
         angle_sigma: float = 0.5,  # standard deviation for angle noise (azimuth and elevation) in degrees
-        fn_rate_visible: float = 0.01,  # chance to lose a PERFECTLY visible object
-        fn_rate_partial: float = 0.50,  # chance to lose a PARTIALLY occluded object
+        fn_rate: float = 0.01,  # chance to lose a perfectly visible object (False Negative)
         fp_rate: float = 0.001,  # chance PER FRAME to hallucinate a non-existent object
         confusion_rate: float = 0.05,  # chance to misclassify an object (e.g., Goal as Ball)
-        send_unique_class_names: bool = True,  # If True, abbreviates world object names to a single uppercase letter (e.g., 'ball' -> 'B'). # noqa: FBT001, FBT002
+        send_unique_class_names: bool = True,  # If True, abbreviates world object names to a single uppercase letter. # noqa: FBT001, FBT002
         decimal_position_precision: int = 2,  # Number of decimal places to truncate coordinates to.
         max_number_of_false_positives: int = 5,
     ):  # The absolute maximum number of hallucinations (fake objects) the camera can generate per frame.
@@ -42,8 +40,7 @@ class OfficialVisionGenerator(VisionGenerator):
         self.fov_v = fov_v
         self.dist_sigma = dist_sigma
         self.angle_sigma = angle_sigma
-        self.fn_rate_visible = fn_rate_visible
-        self.fn_rate_partial = fn_rate_partial
+        self.fn_rate = fn_rate
         self.fp_rate = fp_rate
         self.confusion_rate = confusion_rate
         self.send_unique_class_names = send_unique_class_names
@@ -57,25 +54,18 @@ class OfficialVisionGenerator(VisionGenerator):
         """
         return (v_sensor.azimuths >= -self.fov_h) & (v_sensor.azimuths <= self.fov_h) & (v_sensor.elevations >= -self.fov_v) & (v_sensor.elevations <= self.fov_v)
 
-    def apply_false_negatives(self, visibility_mask: np.ndarray, occlusion_states: np.ndarray) -> np.ndarray:
+    def apply_false_negatives(self, visibility_mask: np.ndarray) -> np.ndarray:
         """
-        Applies different probabilities for the robot to miss an object based on its occlusion state.
+        Applies probability for the robot to miss an object.
         This simulates failures in object detection algorithms (like YOLO).
         """
         new_mask = visibility_mask.copy()
         n_items = len(new_mask)
 
-        # 1. Failure to detect FULLY VISIBLE objects (OcclusionState.NONE)
-        if self.fn_rate_visible > 0:
-            is_visible = (occlusion_states == OcclusionState.NONE.value) & new_mask
-            drops_visible = np.random.random(n_items) < self.fn_rate_visible
-            new_mask[is_visible & drops_visible] = False
-
-        # 2. Failure to detect PARTIALLY OCCLUDED objects (OcclusionState.PARTIAL)
-        if self.fn_rate_partial > 0:
-            is_partial = (occlusion_states == OcclusionState.PARTIAL.value) & new_mask
-            drops_partial = np.random.random(n_items) < self.fn_rate_partial
-            new_mask[is_partial & drops_partial] = False
+        # Failure to detect VISIBLE objects
+        if self.fn_rate > 0:
+            drops = np.random.random(n_items) < self.fn_rate
+            new_mask[new_mask & drops] = False
 
         return new_mask
 
@@ -102,9 +92,6 @@ class OfficialVisionGenerator(VisionGenerator):
         fake_names = np.random.choice(all_world_names, size=n_false_positives)
 
         for name, azi, ele, dist in zip(fake_names, fake_azis, fake_eles, fake_dists, strict=False):
-            # logger.debug(f'Generated false positive: {name} at azi={azi:.2f}, ele={ele:.2f}, dist={dist:.2f}')
-
-            # Abbreviate the object class name if the setting is enabled
             final_name = name
             if self.send_unique_class_names:
                 final_name = name[0].upper()
@@ -121,11 +108,6 @@ class OfficialVisionGenerator(VisionGenerator):
         if n_visible == 0:
             return distances, azimuths, elevations
 
-        # logger.debug(f'Applying noise to {n_visible} visible objects.')
-        # logger.debug(f'Original distances: {distances}')
-        # logger.debug(f'Original azimuths: {azimuths}')
-        # logger.debug(f'Original elevations: {elevations}')
-
         # Generate Gaussian noise based on the configured standard deviations.
         # Distance noise is proportional to the object's actual distance (further = noisier).
         dist_noise = np.random.normal(0.0, distances * self.dist_sigma, n_visible)
@@ -136,10 +118,6 @@ class OfficialVisionGenerator(VisionGenerator):
         noisy_dists = np.maximum(0.0, distances + dist_noise)
         noisy_azis = azimuths + azi_noise
         noisy_eles = elevations + ele_noise
-
-        # logger.debug(f'Noisy distances: {noisy_dists}')
-        # logger.debug(f'Noisy azimuths: {noisy_azis}')
-        # logger.debug(f'Noisy elevations: {noisy_eles}')
 
         return noisy_dists, noisy_azis, noisy_eles
 
@@ -162,23 +140,21 @@ class OfficialVisionGenerator(VisionGenerator):
         fov_mask = self.filter_fov(v_sensor)
         observer_id = agents_list.index(agent)
 
-        # 2. Filter out FULLY occluded objects and the robot's own body parts
-        not_fully_occluded = v_sensor.occlusion_states != OcclusionState.FULL.value
-        visibility_mask = fov_mask & not_fully_occluded & (v_sensor.owner_ids != observer_id)
+        # 2. Filter out occluded objects and the robot's own body parts
+        not_occluded = ~v_sensor.is_occluded
+        visibility_mask = fov_mask & not_occluded & (v_sensor.owner_ids != observer_id)
 
-        # 3. Apply neural network failures (False Negatives based on partial occlusion)
-        final_mask = self.apply_false_negatives(visibility_mask, v_sensor.occlusion_states)
+        # 3. Apply neural network failures (False Negatives)
+        final_mask = self.apply_false_negatives(visibility_mask)
 
         obj_detections: list[PObjectDetection] = []
         n_visible = np.count_nonzero(final_mask)
 
         # Fetch the list of all possible world object names for confusion/hallucination logic
-        all_world_names = np.unique(np.array(v_sensor.marker_names)[v_sensor.owner_ids == -1])
+        all_world_names = np.unique(v_sensor.marker_names[v_sensor.owner_ids == -1])
 
         # ---------------------------------------------------------------------
         # 4. FALSE POSITIVES (Hallucinations)
-        # This is done BEFORE checking 'n_visible > 0' so the robot can hallucinate
-        # even when facing an empty space (e.g., staring at a blank wall).
         # ---------------------------------------------------------------------
         if self.fp_rate > 0 and len(all_world_names) > 0:
             false_positives = self.generate_false_positives(all_world_names)
@@ -190,7 +166,7 @@ class OfficialVisionGenerator(VisionGenerator):
             v_dists = v_sensor.distances[final_mask]
             v_azis = v_sensor.azimuths[final_mask]
             v_eles = v_sensor.elevations[final_mask]
-            v_names = np.array(v_sensor.marker_names)[final_mask]
+            v_names = v_sensor.marker_names[final_mask]
             v_owners = v_sensor.owner_ids[final_mask]
 
             # 5. Apply Noise
@@ -207,22 +183,18 @@ class OfficialVisionGenerator(VisionGenerator):
             # 6a. Real World Objects (With CLASS CONFUSION)
             if np.any(world_mask):
                 for name, azi, ele, dist in zip(v_names[world_mask], n_azis[world_mask], n_eles[world_mask], n_dists[world_mask], strict=False):
-                    # Simulate classification error (Neural Network Confusion)
                     final_name = name
                     if self.confusion_rate > 0 and len(all_world_names) > 1 and random.random() < self.confusion_rate:
                         wrong_names = [n for n in all_world_names if n != name]
                         final_name = random.choice(wrong_names)
 
-                    # Abbreviate name (e.g., 'ball' -> 'B')
                     if self.send_unique_class_names:
                         final_name = final_name[0].upper()
 
                     obj_detections.append(ObjectDetection(final_name, azi, ele, dist))
 
         # ---------------------------------------------------------------------
-        # 6b. RANDOM SHIFT (Applies ONLY to world objects: Real + Fake)
-        # Randomly rolls the array so the agent's parser cannot easily guess
-        # which objects are hallucinations based on their order in the list.
+        # 6b. RANDOM SHIFT
         # ---------------------------------------------------------------------
         if len(obj_detections) > 0:
             n_shift = np.random.randint(0, len(obj_detections))
@@ -230,7 +202,6 @@ class OfficialVisionGenerator(VisionGenerator):
 
         # ---------------------------------------------------------------------
         # 6c. PLAYER PARTS
-        # Grouped by owner_id and cleanly appended at the end of the list.
         # ---------------------------------------------------------------------
         if n_visible > 0:
             unique_players = np.unique(v_owners[~world_mask])
@@ -242,7 +213,6 @@ class OfficialVisionGenerator(VisionGenerator):
                 for name, azi, ele, dist in zip(v_names[p_mask], n_azis[p_mask], n_eles[p_mask], n_dists[p_mask], strict=False):
                     parts.append(ObjectDetection(name, azi, ele, dist))
 
-                # Append the aggregated AgentDetection ('P') to the final perception
                 obj_detections.append(AgentDetection('P', target_agent.team_name, target_agent.agent_id.player_no, parts))
 
         return VisionPerception('See', obj_detections)

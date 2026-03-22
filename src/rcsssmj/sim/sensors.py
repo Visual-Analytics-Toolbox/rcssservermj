@@ -69,7 +69,7 @@ class Camera(CustomSensor):
     def __init__(self, name: str, site: str) -> None:
         super().__init__(name, site)
 
-        self.marker_names: list[str] = []
+        self.marker_names: NDArray[np.str_] = np.zeros(0, dtype=np.str_)
         """The names of the visible markers/objects."""
 
         self.distances: NDArray[np.float64] = np.zeros(0, dtype=np.float64)
@@ -81,8 +81,8 @@ class Camera(CustomSensor):
         self.elevations: NDArray[np.float64] = np.zeros(0, dtype=np.float64)
         """The ground-truth elevation angles to the objects."""
 
-        self.occlusion_states: NDArray[np.int8] = np.zeros(0, dtype=np.int8)
-        """Flags indicating the occluded state from this camera's perspective."""
+        self.is_occluded: NDArray[np.bool_] = np.zeros(0, dtype=np.bool_)
+        """Flags indicating whether the object is occluded from this camera's perspective."""
 
         self.owner_ids: NDArray[np.int_] = np.zeros(0, dtype=np.int_)
         """IDs indicating if the object belongs to the world (-1) or to a specific agent."""

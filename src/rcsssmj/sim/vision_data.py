@@ -8,7 +8,7 @@ from rcsssmj.sim.sensors import Camera
 class VisionData:
     """Encapsulates all necessary data for the vision pipeline."""
 
-    def __init__(self, sensors: Mapping[str, Camera], marker_sites: list[str], marker_names: list[str], owner_ids: np.ndarray, n_world_markers: int) -> None:
+    def __init__(self, sensors: Mapping[str, Camera], marker_sites: list[str], marker_names: np.ndarray, owner_ids: np.ndarray, n_world_markers: int) -> None:
         self.sensors = sensors
         self.marker_sites = marker_sites
         self.marker_names = marker_names
