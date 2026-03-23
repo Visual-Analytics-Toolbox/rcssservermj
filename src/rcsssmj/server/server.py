@@ -6,6 +6,7 @@ from threading import Lock, Thread
 from typing import TYPE_CHECKING, Final, Generic, Protocol, TypeVar
 
 from rcsssmj.monitor.mujoco_monitor import MujocoMonitor
+from rcsssmj.monitor.msgpack_logger_monitor import MsgpackLoggerMonitor
 from rcsssmj.server.remote_agent import RemoteAgent, RemoteAgentState
 from rcsssmj.server.remote_monitor import RemoteMonitor, RemoteMonitorState, SimMonitor
 from rcsssmj.sim.commands import MonitorCommand
@@ -231,6 +232,10 @@ class SimServer(Generic[S]):
         if self.render:
             with self._mutex:
                 self._monitors.append(MujocoMonitor(self.sim.mj_model, 2))
+
+        # create data logger monitor regardless of whether UI rendering is enabled
+        with self._mutex:
+            self._monitors.append(MsgpackLoggerMonitor(filename="simulation_log.dat"))
 
         # run simulation update loop
         if self.sequential_mode:
