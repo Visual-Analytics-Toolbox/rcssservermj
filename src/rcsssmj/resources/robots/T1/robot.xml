@@ -3,6 +3,20 @@
 <mujoco model="T1">
   <compiler angle="radian" meshdir="meshes/"/>
 
+  <custom>
+    <!-- Realistic IMU simulation parameters -->
+    <!-- Gyro bias instability (based on 1.6°/h), in rad/s for the random walk model. -->
+    <numeric name="imu_gyro_drift_rate" data="7.767e-6"/>
+    <!-- Accelerometer bias instability (based on 18 µg), in m/s^2 for the random walk model. -->
+    <numeric name="imu_accel_drift_rate" data="1.766e-4"/>
+    <!-- Gyro measurement noise std dev (rad/s). -->
+    <numeric name="imu_gyro_noise_std" data="0.005"/>
+    <!-- Accelerometer measurement noise std dev (m/s^2). -->
+    <numeric name="imu_accel_noise_std" data="0.05"/>
+    <!-- Madgwick sensor fusion filter beta parameter. -->
+    <numeric name="imu_beta" data="0.05"/>
+  </custom>
+
   <default>
     <!-- general defaults -->
     <equality solref="0.001 2" />

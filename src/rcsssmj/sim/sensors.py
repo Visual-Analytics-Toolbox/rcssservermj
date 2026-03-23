@@ -62,8 +62,8 @@ class Microphone(CustomSensor):
         self.distances: NDArray[np.float64] = np.zeros(0, dtype=np.float64)
         """The distances to the audio origins."""
 
-class T1IMUSensor(CustomSensor):
-    """A realistic IMU sensor representing the HiPNUC HI13R4 from Booster T1."""
+class IMUSensor(CustomSensor):
+    """A realistic IMU sensor."""
 
     def __init__(self, name: str, site: str) -> None:
         """Construct a new IMU sensor.
