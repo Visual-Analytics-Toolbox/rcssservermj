@@ -234,7 +234,7 @@ class BaseSimulation(ABC):
         self._a_data = a_compile(self._mj_spec)
 
         # extract visible object markers of world
-        self._v_data = v_compile(self._mj_spec, list(self.sim_agents))
+        self._v_data = v_compile(self._mj_spec)
 
         # initialize vision generator
         self._vision_generator = OfficialVisionGenerator()
@@ -310,7 +310,7 @@ class BaseSimulation(ABC):
             obj.bind(self._mj_model, self._mj_data)
 
         # recompile vision sensors
-        self._v_data = v_recompile(self._mj_spec, self._v_data, list(self.sim_agents))
+        self._v_data = v_recompile(self._mj_spec, self._v_data)
 
     def step(self, monitor_commands: Sequence[MonitorCommand]) -> None:
         """Perform a simulation step.
@@ -393,7 +393,7 @@ class BaseSimulation(ABC):
         game_state_perception = self._generate_game_state_perception()
 
         if gen_vision:
-            v_step(self._v_data, self._mj_model, self._mj_data, agents, self.check_occlusion)
+            v_step(self._v_data, self._mj_model, self._mj_data, self.check_occlusion)
 
         # generate agent specific perceptions
         for agent in agents:
@@ -475,7 +475,7 @@ class BaseSimulation(ABC):
                 cam = self._v_data.sensors.get(camera_site_name, None)
 
                 if cam is not None:
-                    vision_perception = self._vision_generator.generate(cam, agent, agents)
+                    vision_perception = self._vision_generator.generate(cam, agent.agent_id.prefix)
                     agent_perceptions.append(vision_perception)
 
             # forward generated perceptions to agent instance

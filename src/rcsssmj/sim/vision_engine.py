@@ -7,43 +7,45 @@ from rcsssmj.sim.sensors import Camera
 from rcsssmj.sim.vision_data import VisionData
 
 
-def v_compile(mj_spec: Any, agents: list) -> VisionData:
+def v_compile(mj_spec: Any) -> VisionData:
     """Extracts cameras, markers, and pre-allocates memory during compilation."""
     sensors = {site.name: Camera(site.name, site.name) for site in mj_spec.sites if site.name.endswith('camera')}
 
-    agent_prefixes = [a.agent_id.prefix for a in agents]
+    agent_prefixes = [site.name[:-6] for site in mj_spec.sites if site.name.endswith('camera')]
 
-    # Extract world markers (e.g., ball, goals)
-    world_markers = [(site.name, site.name[:-10]) for site in mj_spec.sites if site.name.endswith('-vismarker') and not any(site.name.startswith(prefix) for prefix in agent_prefixes)]
+    obj_markers = []
+    owner_ids_list = []
 
-    n_world_markers = len(world_markers)
+    for site in mj_spec.sites:
+        if site.name.endswith('-vismarker'):
+            is_agent = False
+            for prefix in agent_prefixes:
+                if site.name.startswith(prefix):
+                    marker_name = site.name[len(prefix):-10]
+                    obj_markers.append((site.name, marker_name))
+                    owner_ids_list.append(prefix)
+                    is_agent = True
+                    break
+            
+            if not is_agent:
+                marker_name = site.name[:-10]
+                obj_markers.append((site.name, marker_name))
+                owner_ids_list.append('')
 
-    # Combine world markers and agent markers
-    obj_markers = list(world_markers)
-    for p in agents:
-        obj_markers.extend(p.markers)
-
-    n_markers = len(obj_markers)
+    n_world_markers = sum(1 for o in owner_ids_list if o == '')
     marker_sites = [m[0] for m in obj_markers]
     marker_names = np.array([m[1] for m in obj_markers], dtype=str)
-
-    # Prepare the "owners" mask
-    owner_ids = np.full(n_markers, -1, dtype=int)
-    cursor = n_world_markers
-    for idx_a, p in enumerate(agents):
-        n_p_markers = len(p.markers)
-        owner_ids[cursor : cursor + n_p_markers] = idx_a
-        cursor += n_p_markers
+    owner_ids = np.array(owner_ids_list, dtype=object)
 
     return VisionData(sensors, marker_sites, marker_names, owner_ids, n_world_markers)
 
 
-def v_recompile(mj_spec: Any, _old_data: VisionData, agents: list) -> VisionData:
+def v_recompile(mj_spec: Any, _old_data: VisionData) -> VisionData:
     """Recompiles vision sensors and marker memory when the world changes."""
-    return v_compile(mj_spec, agents)
+    return v_compile(mj_spec)
 
 
-def v_step(v_data: VisionData, mj_model: Any, mj_data: Any, agents: list, check_occlusion: bool) -> None:  # noqa: FBT001
+def v_step(v_data: VisionData, mj_model: Any, mj_data: Any, check_occlusion: bool) -> None:  # noqa: FBT001
     """Updates object positions in pre-allocated memory and calculates Ground Truth."""
     n_markers = len(v_data.marker_sites)
 
@@ -53,12 +55,9 @@ def v_step(v_data: VisionData, mj_model: Any, mj_data: Any, agents: list, check_
 
     geomgroup = np.array([1, 1, 1, 1, 0, 0], dtype=np.uint8)
 
-    # 2. Update the vision for each agent (Camera)
-    for agent in agents:
-        camera_site_name = agent.agent_id.prefix + 'camera'
-        cam = v_data.sensors.get(camera_site_name, None)
-        if cam is None:
-            continue
+    # 2. Update the vision for each camera directly
+    for camera_site_name, cam in v_data.sensors.items():
+        observer_prefix = camera_site_name[:-6]
 
         s_site = mj_data.site(cam.site)
         camera_pos = s_site.xpos.astype(np.float64)
@@ -74,12 +73,11 @@ def v_step(v_data: VisionData, mj_model: Any, mj_data: Any, agents: list, check_
 
         # --- NATIVE MUJOCO RAYCASTING ---
         if check_occlusion:
-            observer_prefix = agent.agent_id.prefix
             geomid_arr = np.zeros(1, dtype=np.int32)
 
             # Test occlusion for each world object (the Target)
             for i in range(n_markers):
-                target_owner = v_data.owner_ids[i]
+                target_owner_prefix = v_data.owner_ids[i]
                 target_name = v_data.marker_names[i]
 
                 ray_vec = v_data.obj_pos[:, i] - camera_pos
@@ -117,9 +115,8 @@ def v_step(v_data: VisionData, mj_model: Any, mj_data: Any, agents: list, check_
                             hit_target = False
 
                             # Target is a Player
-                            if target_owner != -1:
-                                target_prefix = agents[target_owner].agent_id.prefix
-                                if hit_body_name and hit_body_name.startswith(target_prefix):
+                            if target_owner_prefix != '':
+                                if hit_body_name and hit_body_name.startswith(target_owner_prefix):
                                     hit_target = True
                             # Target is a World Object (Ball, Goal)
                             elif hit_body_name and target_name in hit_body_name:

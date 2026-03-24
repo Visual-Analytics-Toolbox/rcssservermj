@@ -12,7 +12,7 @@ class VisionGenerator(ABC):
     """Abstract base class for all vision generators."""
 
     @abstractmethod
-    def generate(self, v_sensor: Camera, agent: Any, agents_list: list) -> VisionPerception:
+    def generate(self, v_sensor: Camera, observer_prefix: str) -> VisionPerception:
         """Main method orchestrating the perception generation."""
 
 
@@ -128,7 +128,7 @@ class OfficialVisionGenerator(VisionGenerator):
         factor = 10**self.decimal_position_precision
         return cast('np.ndarray', np.trunc(values * factor) / factor)
 
-    def generate(self, v_sensor: Camera, agent: Any, agents_list: list) -> VisionPerception:
+    def generate(self, v_sensor: Camera, observer_prefix: str) -> VisionPerception:
         """
         The main 'Template Method' that orchestrates the entire vision pipeline:
         FOV filtering, occlusion handling, false negatives, noise, and formatting.
@@ -138,11 +138,10 @@ class OfficialVisionGenerator(VisionGenerator):
 
         # 1. Evaluate Field of View (FOV)
         fov_mask = self.filter_fov(v_sensor)
-        observer_id = agents_list.index(agent)
 
         # 2. Filter out occluded objects and the robot's own body parts
         not_occluded = ~v_sensor.is_occluded
-        visibility_mask = fov_mask & not_occluded & (v_sensor.owner_ids != observer_id)
+        visibility_mask = fov_mask & not_occluded & (v_sensor.owner_ids != observer_prefix)
 
         # 3. Apply neural network failures (False Negatives)
         final_mask = self.apply_false_negatives(visibility_mask)
@@ -151,7 +150,7 @@ class OfficialVisionGenerator(VisionGenerator):
         n_visible = np.count_nonzero(final_mask)
 
         # Fetch the list of all possible world object names for confusion/hallucination logic
-        all_world_names = np.unique(v_sensor.marker_names[v_sensor.owner_ids == -1])
+        all_world_names = np.unique(v_sensor.marker_names[v_sensor.owner_ids == ''])
 
         # ---------------------------------------------------------------------
         # 4. FALSE POSITIVES (Hallucinations)
@@ -178,7 +177,7 @@ class OfficialVisionGenerator(VisionGenerator):
             n_eles = self._trunc(n_eles)
 
             # Create a mask to separate world static objects from dynamic agents
-            world_mask = v_owners == -1
+            world_mask = v_owners == ''
 
             # 6a. Real World Objects (With CLASS CONFUSION)
             if np.any(world_mask):
@@ -205,14 +204,18 @@ class OfficialVisionGenerator(VisionGenerator):
         # ---------------------------------------------------------------------
         if n_visible > 0:
             unique_players = np.unique(v_owners[~world_mask])
-            for p_idx in unique_players:
-                p_mask = v_owners == p_idx
-                target_agent = agents_list[p_idx]
+            for p_prefix in unique_players:
+                p_mask = v_owners == p_prefix
 
-                parts = []
+                # Extract team name and player number directly from the MuJoCo prefix string (e.g., 'r-red-1-')
+                prefix_parts = p_prefix.split('-')
+                team_name = prefix_parts[1]
+                player_no = int(prefix_parts[2])
+
+                agent_parts = []
                 for name, azi, ele, dist in zip(v_names[p_mask], n_azis[p_mask], n_eles[p_mask], n_dists[p_mask], strict=False):
-                    parts.append(ObjectDetection(name, azi, ele, dist))
+                    agent_parts.append(ObjectDetection(name, azi, ele, dist))
 
-                obj_detections.append(AgentDetection('P', target_agent.team_name, target_agent.agent_id.player_no, parts))
+                obj_detections.append(AgentDetection('P', team_name, player_no, agent_parts))
 
         return VisionPerception('See', obj_detections)
