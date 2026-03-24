@@ -58,6 +58,8 @@ def v_step(v_data: VisionData, mj_model: Any, mj_data: Any, check_occlusion: boo
     # 2. Update the vision for each camera directly
     for camera_site_name, cam in v_data.sensors.items():
         observer_prefix = camera_site_name[:-6]
+        observer_body_name = observer_prefix + 'torso'
+        bodyexclude_id = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_BODY, observer_body_name)
 
         s_site = mj_data.site(cam.site)
         camera_pos = s_site.xpos.astype(np.float64)
@@ -88,49 +90,28 @@ def v_step(v_data: VisionData, mj_model: Any, mj_data: Any, check_occlusion: boo
 
                 ray_dir = ray_vec / ray_length
 
-                current_pnt = camera_pos.copy()
-                remaining_dist = ray_length
-                target_occluded = False
+                # Perform a single raycast excluding the observer's entire body tree
+                dist = mujoco.mj_ray(mj_model, mj_data, camera_pos, ray_dir, geomgroup, 0, bodyexclude_id, geomid_arr)
 
-                # Piercing Raycast Loop: Ignore our own body parts
-                while remaining_dist > 0.05: # 5cm tolerance near the target center
-                    dist = mujoco.mj_ray(mj_model, mj_data, current_pnt, ray_dir, geomgroup, 0, -1, geomid_arr)
+                # Check if we hit something before reaching the target
+                if 0 <= dist < ray_length - 0.05:
                     hit_geom = geomid_arr[0]
-
-                    if dist < 0 or dist >= remaining_dist - 0.05:
-                        # Clear path to target (or hit was behind the target)
-                        break
-
                     if hit_geom != -1:
                         hit_body = mj_model.geom_bodyid[hit_geom]
                         hit_body_name = mujoco.mj_id2name(mj_model, mujoco.mjtObj.mjOBJ_BODY, hit_body)
 
-                        # 1. If we hit ourselves, pierce through and continue
-                        if hit_body_name and hit_body_name.startswith(observer_prefix):
-                            advance = dist + 0.001 # Advance 1mm past the collision
-                            current_pnt += ray_dir * advance
-                            remaining_dist -= advance
-                        else:
-                            # We hit something! Let's verify if it's the Target's own body
-                            hit_target = False
+                        hit_target = False
 
-                            # Target is a Player
-                            if target_owner_prefix != '':
-                                if hit_body_name and hit_body_name.startswith(target_owner_prefix):
-                                    hit_target = True
-                            # Target is a World Object (Ball, Goal)
-                            elif hit_body_name and target_name in hit_body_name:
+                        # Target is a Player
+                        if target_owner_prefix != '':
+                            if hit_body_name and hit_body_name.startswith(target_owner_prefix):
                                 hit_target = True
+                        # Target is a World Object (Ball, Goal)
+                        elif hit_body_name and target_name in hit_body_name:
+                            hit_target = True
 
-                            if not hit_target:
-                                target_occluded = True
-                            break
-                    else:
-                        break
-
-                # Since mj_ray is binary (hit or not hit), we only use FULL occlusion now.
-                if target_occluded:
-                    is_occluded_mask[i] = True
+                        if not hit_target:
+                            is_occluded_mask[i] = True
 
         # --- SENSOR UPDATE ---
         cam.marker_names = v_data.marker_names
