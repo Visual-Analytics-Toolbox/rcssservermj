@@ -1,6 +1,4 @@
-import json
 import logging
-import os
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
 from typing import TYPE_CHECKING, Any, Final, cast
@@ -43,8 +41,7 @@ class BaseSimulation(ABC):
         spec_provider: ModelSpecProvider | None = None,
         n_substeps: int = 4,
         vision_interval: int = 1,
-        check_occlusion: bool = True,
-        vision_config_path: str | None = None
+        check_occlusion: bool = True
     ) -> None:
         """Construct a new simulation.
 
@@ -71,9 +68,6 @@ class BaseSimulation(ABC):
 
         self.check_occlusion: Final[bool] = check_occlusion
         """ Whether to check for occlusions when generating vision perceptions."""
-
-        self.vision_config_path: Final[str | None] = vision_config_path
-        """ Optional path to a personalized vision configuration file"""
 
         self._frame_id: int = 0
         """The current simulation frame number."""
@@ -242,34 +236,8 @@ class BaseSimulation(ABC):
         # extract visible object markers of world
         self._v_data = v_compile(self._mj_spec, list(self.sim_agents))
 
-        config_to_load = None
-
-        # 1. In case the user provided a vision config file path via command line argument, we try to load it
-        if self.vision_config_path and os.path.exists(self.vision_config_path):
-            config_to_load = self.vision_config_path
-            logger.info("Loaded CUSTOM vision configuration from '%s'.", config_to_load)
-        elif self.vision_config_path:
-            logger.error("Provided vision config file '%s' not found! Falling back to default.", self.vision_config_path)
-
-        # 2. If there is no user-provided config file, it's loaded the default configuration file
-        if not config_to_load:
-            package_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            default_config_path = os.path.join(package_dir, 'configs', 'vision_config.json')
-
-            if os.path.exists(default_config_path):
-                config_to_load = default_config_path
-                logger.info("Loaded DEFAULT vision configuration from '%s'.", config_to_load)
-
-        # 3. Applies the configuration to the vision generator
-        if config_to_load:
-            with open(config_to_load) as f:
-                config_params = json.load(f)
-            self._vision_generator = OfficialVisionGenerator(**config_params)
-        else:
-            # Fallback to default vision generartor with hardcoded paramenters
-            self._vision_generator = OfficialVisionGenerator()
-            logger.warning('Vision config files not found. Using default parameters from source code.')
-        # ----------------------------------------
+        # initialize vision generator
+        self._vision_generator = OfficialVisionGenerator()
 
         # reset frame id
         self._frame_id = 0

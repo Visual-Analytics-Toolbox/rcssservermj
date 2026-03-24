@@ -30,8 +30,8 @@ class OfficialVisionGenerator(VisionGenerator):
         confusion_rate: float = 0.05,  # chance to misclassify an object (e.g., Goal as Ball)
         send_unique_class_names: bool = True,  # If True, abbreviates world object names to a single uppercase letter. # noqa: FBT001, FBT002
         decimal_position_precision: int = 2,  # Number of decimal places to truncate coordinates to.
-        max_number_of_false_positives: int = 5,
-    ):  # The absolute maximum number of hallucinations (fake objects) the camera can generate per frame.
+        max_number_of_false_positives: int = 5, # The absolute maximum number of hallucinations (fake objects) the camera can generate per frame.
+    ):
         """
         Initializes the OfficialVisionGenerator with specific configuration parameters.
         These parameters control the camera constraints and the statistical error models.
