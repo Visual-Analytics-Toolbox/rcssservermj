@@ -1,6 +1,6 @@
 import random
 from abc import ABC, abstractmethod
-from typing import Any, cast
+from typing import cast
 
 import numpy as np
 
