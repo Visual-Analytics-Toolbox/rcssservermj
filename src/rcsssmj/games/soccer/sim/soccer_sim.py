@@ -466,6 +466,7 @@ class SoccerSimulation(BaseSimulation):
 
         x_sign = -1 if agent_id.team_id == TeamSide.LEFT.value else 1
         root_body = robot_spec.body('torso')
+        player.standing_height = float(root_body.pos[2])  # store robot-specific standing height for beam
         root_body.pos[0] = x_sign * (2 * agent_id.player_no + 1)
         root_body.pos[1] = (self.field.field_dim[1] / 2) + self.field.field_border
         root_body.quat[0:4] = quat_from_axis_angle((0, 0, 1), -pi / 2)
@@ -597,7 +598,7 @@ class SoccerSimulation(BaseSimulation):
         x_factor = -1 if agent_id.team_id == TeamSide.LEFT.value else 1
         theta_shift = 0 if agent_id.team_id == TeamSide.LEFT.value else pi
 
-        pos = (abs(beam_pose[0]) * x_factor, beam_pose[1], 0.6745)
+        pos = (abs(beam_pose[0]) * x_factor, beam_pose[1], player.standing_height)
         theta = beam_pose[2] + theta_shift
         quat = quat_from_axis_angle((0, 0, 1), theta)
 
