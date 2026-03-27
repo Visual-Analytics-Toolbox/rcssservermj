@@ -75,34 +75,34 @@
       <!-- right leg -->
       <body name="r_hip_pitch_link" pos="0 -0.0475 -0.0435">
         <inertial pos="7.92e-05 -0.0319026 9.097e-05" quat="0.428329 0.522509 -0.486869 0.553604" mass="0.459314" diaginertia="0.000279632 0.000271753 0.000264745"/>
-        <joint name="r_hip_pitch_joint" pos="0 0 0" axis="0 1 0" range="-3.12 2.94" actuatorfrcrange="-16 16" damping="0.02"/>
+        <joint name="r_hip_pitch_joint" pos="0 0 0" axis="0 1 0" range="-3.12 2.94" actuatorfrcrange="-21 21" damping="0.02"/>
         <geom class="visual" material="gray" mesh="r_hip_pitch_link"/>
         <geom class="collision" name="r_hip_pitch" type="mesh" mesh="r_hip_pitch_link"/>
         <body name="r_hip_roll_link" pos="0 -0.034 0">
           <inertial pos="0.00102172 -0.00033797 -0.0584583" quat="0.701595 0.0555068 0.0565269 0.708158" mass="0.558201" diaginertia="0.000740261 0.000626564 0.000407515"/>
-          <joint name="r_hip_roll_joint" pos="0 0 0" axis="1 0 0" range="-3.14 0.17" actuatorfrcrange="-16 16" damping="0.02"/>
+          <joint name="r_hip_roll_joint" pos="0 0 0" axis="1 0 0" range="-3.14 0.17" actuatorfrcrange="-21 21" damping="0.02"/>
           <geom class="visual" material="gray" mesh="r_hip_roll_link"/>
           <geom class="collision" name="r_hip_roll" type="mesh" mesh="r_hip_roll_link"/>
           <body name="r_thigh_link" pos="-0.00035 0 -0.0974">
             <inertial pos="0.00064557 -0.00075206 -0.0208405" quat="0.703792 0.710207 0.0135977 -0.00990732" mass="0.154843" diaginertia="0.000187812 0.000161216 0.000100573"/>
-            <joint name="r_thigh_joint" pos="0 0 0" axis="0 0 1" range="-2.87 2.87" actuatorfrcrange="-16 16" damping="0.02"/>
+            <joint name="r_thigh_joint" pos="0 0 0" axis="0 0 1" range="-2.87 2.87" actuatorfrcrange="-21 21" damping="0.02"/>
             <geom class="visual" material="gray" mesh="r_thigh_link"/>
             <geom class="collision" name="r_thigh" type="mesh" mesh="r_thigh_link"/>
             <body name="r_calf_link" pos="0 0 -0.045">
               <inertial pos="-1.001e-05 -0.00237049 -0.0666124" quat="0.999998 -0.000800274 0.00132271 -0.000965395" mass="0.858523" diaginertia="0.00416944 0.00414653 0.000429274"/>
-              <joint name="r_calf_joint" pos="0 0 0" axis="0 1 0" range="-2.14 2.35" actuatorfrcrange="-16 16" damping="0.02"/>
+              <joint name="r_calf_joint" pos="0 0 0" axis="0 1 0" range="-2.14 2.35" actuatorfrcrange="-21 21" damping="0.02"/>
               <geom class="visual" material="gray" mesh="r_calf_link"/>
               <geom class="collision" name="r_calf" type="mesh" mesh="r_calf_link_simplify"/>
               <geom class="collision" name="r_calf_box" size="0.005 0.01 0.0275" pos="0 0 -0.055" type="box"/>
               <body name="r_ankle_pitch_link" pos="0 0 -0.14">
                 <inertial pos="0.00503044 0.00051345 -0.00016685" quat="-0.00108772 0.710445 -0.00435661 0.703738" mass="0.163526" diaginertia="0.00028931 0.000208237 0.000115362"/>
-                <joint name="r_ankle_pitch_joint" pos="0 0 0" axis="0 1 0" range="-0.97 0.92" actuatorfrcrange="-16 16" damping="0.02"/>
+                <joint name="r_ankle_pitch_joint" pos="0 0 0" axis="0 1 0" range="-0.97 0.92" actuatorfrcrange="-21 21" damping="0.02"/>
                 <geom class="visual" material="gray" mesh="r_ankle_pitch_link"/>
                 <geom class="collision" name="r_ankle_pitch" type="mesh" mesh="r_ankle_pitch_link"/>
                 <body name="r_ankle_roll_link" pos="0.051 0 0">
                   <site name="rfoot-vismarker" pos="0 0 0"/>
                   <inertial pos="0.0046213 8.211e-05 -0.015021" quat="0.563454 0.425204 0.421185 0.569494" mass="0.616626" diaginertia="0.00150793 0.00140979 0.000471117"/>
-                  <joint name="r_ankle_roll_joint" pos="0 0 0" axis="1 0 0" range="-0.78 0.78" actuatorfrcrange="-16 16" damping="0.02"/>
+                  <joint name="r_ankle_roll_joint" pos="0 0 0" axis="1 0 0" range="-0.78 0.78" actuatorfrcrange="-21 21" damping="0.02"/>
                   <geom class="visual" material="gray" mesh="r_ankle_roll_link"/>
                   <geom class="collision" name="r_foot" type="mesh" mesh="r_ankle_roll_link_simplify"/>
                 </body>
@@ -115,34 +115,34 @@
       <!-- left leg -->
       <body name="l_hip_pitch_link" pos="0 0.0475 -0.0435">
         <inertial pos="7.921e-05 0.0319025 -0.0001562" quat="0.497171 0.489511 -0.578693 0.422273" mass="0.459318" diaginertia="0.000279904 0.000271819 0.000264407"/>
-        <joint name="l_hip_pitch_joint" pos="0 0 0" axis="0 1 0" range="-3.12 2.94" actuatorfrcrange="-16 16" damping="0.02"/>
+        <joint name="l_hip_pitch_joint" pos="0 0 0" axis="0 1 0" range="-3.12 2.94" actuatorfrcrange="-21 21" damping="0.02"/>
         <geom class="visual" material="gray" mesh="l_hip_pitch_link"/>
         <geom class="collision" name="l_hip_pitch" type="mesh" mesh="l_hip_pitch_link"/>
         <body name="l_hip_roll_link" pos="0 0.034 0">
           <inertial pos="0.00087873 1.341e-05 -0.0584583" quat="0.702052 0.056967 0.0602688 0.70728" mass="0.558201" diaginertia="0.000740475 0.000627166 0.00040724"/>
-          <joint name="l_hip_roll_joint" pos="0 0 0" axis="1 0 0" range="-0.17 3.14" actuatorfrcrange="-16 16" damping="0.02"/>
+          <joint name="l_hip_roll_joint" pos="0 0 0" axis="1 0 0" range="-0.17 3.14" actuatorfrcrange="-21 21" damping="0.02"/>
           <geom class="visual" material="gray" mesh="l_hip_roll_link"/>
           <geom class="collision" name="l_hip_roll" type="mesh" mesh="l_hip_roll_link"/>
           <body name="l_thigh_link" pos="-0.00035 0 -0.0974">
             <inertial pos="0.00071587 0.00075215 -0.0208406" quat="0.710169 0.70371 0.0141108 -0.015948" mass="0.154842" diaginertia="0.000187829 0.000161177 0.000100564"/>
-            <joint name="l_thigh_joint" pos="0 0 0" axis="0 0 1" range="-2.87 2.87" actuatorfrcrange="-16 16" damping="0.02"/>
+            <joint name="l_thigh_joint" pos="0 0 0" axis="0 0 1" range="-2.87 2.87" actuatorfrcrange="-21 21" damping="0.02"/>
             <geom class="visual" material="gray" mesh="l_thigh_link"/>
             <geom class="collision" name="l_thigh" type="mesh" mesh="l_thigh_link"/>
             <body name="l_calf_link" pos="0 0 -0.045">
               <inertial pos="-1.001e-05 0.00237048 -0.0666125" quat="0.999997 0.000796813 -0.00130207 0.00164731" mass="0.858523" diaginertia="0.00416944 0.00414652 0.000429275"/>
-              <joint name="l_calf_joint" pos="0 0 0" axis="0 1 0" range="-2.14 2.35" actuatorfrcrange="-16 16" damping="0.02"/>
+              <joint name="l_calf_joint" pos="0 0 0" axis="0 1 0" range="-2.14 2.35" actuatorfrcrange="-21 21" damping="0.02"/>
               <geom class="visual" material="gray" mesh="l_calf_link"/>
               <geom class="collision" name="l_calf" type="mesh" mesh="l_calf_link_simplify"/>
               <geom class="collision" name="l_calf_box" size="0.005 0.01 0.0275" pos="0 0 -0.055" type="box"/>
               <body name="l_ankle_pitch_link" pos="0 0 -0.14">
                 <inertial pos="0.00503044 -0.00051345 -0.00016685" quat="0.00108772 0.710445 0.00435661 0.703738" mass="0.163526" diaginertia="0.00028931 0.000208237 0.000115362"/>
-                <joint name="l_ankle_pitch_joint" pos="0 0 0" axis="0 1 0" range="-0.97 0.92" actuatorfrcrange="-16 16" damping="0.02"/>
+                <joint name="l_ankle_pitch_joint" pos="0 0 0" axis="0 1 0" range="-0.97 0.92" actuatorfrcrange="-21 21" damping="0.02"/>
                 <geom class="visual" material="gray" mesh="l_ankle_pitch_link"/>
                 <geom class="collision" name="l_ankle_pitch" type="mesh" mesh="l_ankle_pitch_link"/>
                 <body name="l_ankle_roll_link" pos="0.051 0 0">
                   <site name="lfoot-vismarker" pos="0 0 0"/>
                   <inertial pos="0.00456214 8.211e-05 -0.0125654" quat="0.563454 0.425204 0.421185 0.569494" mass="0.616626" diaginertia="0.00150793 0.00140979 0.000471117"/>
-                  <joint name="l_ankle_roll_joint" pos="0 0 0" axis="1 0 0" range="-0.78 0.78" actuatorfrcrange="-16 16" damping="0.02"/>
+                  <joint name="l_ankle_roll_joint" pos="0 0 0" axis="1 0 0" range="-0.78 0.78" actuatorfrcrange="-21 21" damping="0.02"/>
                   <geom class="visual" material="gray" mesh="l_ankle_roll_link"/>
                   <geom class="collision" name="l_foot" type="mesh" mesh="l_ankle_roll_link_simplify"/>
                 </body>
@@ -230,7 +230,7 @@
           <!-- head -->
           <body name="head_yaw_link" pos="0.014 -0.00026667 0.1981">
             <inertial pos="3.546e-05 0.00172237 0.0237663" quat="0.993336 -0.115207 0.000198831 -0.0032838" mass="0.187637" diaginertia="4.64603e-05 3.89466e-05 3.6523e-05"/>
-            <joint name="head_yaw_joint" pos="0 0 0" axis="0 0 1" range="-1.43 1.43" actuatorfrcrange="-3 3" damping="0.02"/>
+            <joint name="head_yaw_joint" pos="0 0 0" axis="0 0 1" range="-1.43 1.43" actuatorfrcrange="-3.7 3.7" damping="0.02"/>
             <geom class="visual" material="gray" mesh="head_yaw_link"/>
             <geom class="collision" name="head_yaw" type="mesh" mesh="head_yaw_link_simplify"/>
 
@@ -240,7 +240,7 @@
               <site name="say_a-speaker" pos="0 0 0.04"/>
               <site name="hear_a-micro" pos="0 0 0.08"/>
               <inertial pos="0.0266546 -0.00167129 0.0555251" quat="0.453472 0.464811 -0.534731 0.540719" mass="0.33297" diaginertia="0.00102166 0.000807505 0.000557328"/>
-              <joint name="head_pitch_joint" pos="0 0 0" axis="0 1 0" range="-1.23 1.01" actuatorfrcrange="-3 3" damping="0.02"/>
+              <joint name="head_pitch_joint" pos="0 0 0" axis="0 1 0" range="-1.23 1.01" actuatorfrcrange="-3.7 3.7" damping="0.02"/>
               <geom class="visual" material="gray" mesh="head_pitch_link"/>
               <geom class="collision" name="head" size="0.06" pos="0.04 0 0.06" type="sphere"/>
 
