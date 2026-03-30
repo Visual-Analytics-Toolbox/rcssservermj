@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 def v_compile(mj_spec: Any) -> VisionData:
-    """Extracts cameras, markers, and pre-allocates memory during compilation."""
+    """Extracts camera definitions and semantic markers, pre-allocating memory structures during compilation."""
     sensors = {site.name: Camera(site.name, site.name) for site in mj_spec.sites if site.name.endswith('camera')}
 
     agent_prefixes = [site.name[:-6] for site in mj_spec.sites if site.name.endswith('camera')]
@@ -44,30 +44,30 @@ def v_compile(mj_spec: Any) -> VisionData:
 
 
 def v_recompile(mj_spec: Any, _old_data: VisionData) -> VisionData:
-    """Recompiles vision sensors and marker memory when the world changes."""
+    """Recompiles sensor dictionaries and marker buffers when the simulator world undergoes structural changes."""
     return v_compile(mj_spec)
 
 
 def v_step(v_data: VisionData, mj_model: Any, mj_data: Any, check_occlusion: bool) -> None:  # noqa: FBT001
-    """Updates object positions in pre-allocated memory and calculates Ground Truth."""
+    """Calculates ground truth polar coordinates and determines visibility via batch raycasting against the physics engine."""
     n_markers = len(v_data.marker_sites)
 
-    # Update object positions into pre-allocated memory directly
+    # Read native ground truth object positions directly into the pre-allocated memory buffer
     for idx, site_name in enumerate(v_data.marker_sites):
         v_data.obj_pos[:, idx] = mj_data.site(site_name).xpos.astype(np.float64)
 
-    # Collision & Visual Geom Groups (Enables checking against both physics and visual layers)
+    # Bitmask for geom groups filtering (allows raycasting against both collision and visual geoms)
     geomgroup = np.array([1, 1, 1, 1, 0, 0], dtype=np.uint8)
 
-    # Pre-fetch target body ids for all markers once per step (fast list comprehension -> numpy)
+    # Pre-fetch parent body IDs for all markers once per simulation step (list comprehension wrapped in numpy)
     target_site_ids = np.array([mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_SITE, name) for name in v_data.marker_sites], dtype=np.int32)
     target_body_ids = mj_model.site_bodyid[target_site_ids]
 
-    # Update the vision for each camera directly
+    # Compute line-of-sight and relative coordinates for each active camera
     for camera_site_name, cam in v_data.sensors.items():
         observer_prefix = camera_site_name[:-6]
 
-        # exclude the observer's head to prevent immediate self-collision at the ray's origin.
+        # Exclude the observer's head body from raycast to prevent instantaneous self-collision at the ray's origin
         observer_head_name = observer_prefix + 'H2'
         bodyexclude_id = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_BODY, observer_head_name)
 
@@ -83,10 +83,10 @@ def v_step(v_data: VisionData, mj_model: Any, mj_data: Any, check_occlusion: boo
 
         is_occluded_mask = np.full(n_markers, False, dtype=np.bool_)
 
-        # --- NATIVE MUJOCO RAYCASTING ---
+        # --- BATCH MUJOCO RAYCASTING ---
         if check_occlusion:
-            # Vectorized calculations for all rays
-            ray_vecs = v_data.obj_pos.T - camera_pos  # (n_markers, 3)
+            # Perform vectorized geometry calculations for all outbound rays
+            ray_vecs = v_data.obj_pos.T - camera_pos  # Shape: (n_markers, 3)
             ray_lengths = np.linalg.norm(ray_vecs, axis=1)
 
             valid_mask = ray_lengths >= 1e-4
@@ -94,28 +94,28 @@ def v_step(v_data: VisionData, mj_model: Any, mj_data: Any, check_occlusion: boo
             ray_dirs = np.zeros_like(ray_vecs)
             ray_dirs[valid_mask] = ray_vecs[valid_mask] / ray_lengths[valid_mask, np.newaxis]
 
-            # Flatten to ensure contiguous 1D array as expected by pybind
+            # Enforce C-contiguous 1D memory layout required by pybind for the MuJoCo C API
             ray_dirs_flat = np.ascontiguousarray(ray_dirs, dtype=np.float64).flatten()
             geomid_arr = np.full(n_markers, -1, dtype=np.int32)
             dist_arr = np.full(n_markers, -1.0, dtype=np.float64)
 
-            # Cast all rays at once
+            # Execute batch raycasting (simultaneously checking all markers)
             mujoco.mj_multiRay(mj_model, mj_data, camera_pos, ray_dirs_flat, geomgroup, 0, bodyexclude_id, geomid_arr, dist_arr, None, n_markers, -1.0)
 
-            # Process raycast results completely vectorized
+            # Process occlusion results using vectorized boolean operations
             hit_something_mask = (dist_arr >= 0) & (dist_arr < ray_lengths - 0.05)
 
-            # Extract bodies only for valid geoms to avoid out-of-bounds indexing
+            # Resolve geom ids safely to prevent invalid memory access on out-of-bounds indices
             safe_geomid_arr = np.maximum(geomid_arr, 0)
             hit_bodies = mj_model.geom_bodyid[safe_geomid_arr]
 
             valid_geom_mask = geomid_arr != -1
             not_target_mask = hit_bodies != target_body_ids
 
-            # Mask is True if ray is valid, hit a geom, and that geom is NOT the target body
+            # A marker is considered occluded if the ray hit a valid geom that belongs to a different body
             is_occluded_mask = valid_mask & hit_something_mask & valid_geom_mask & not_target_mask
 
-        # --- SENSOR UPDATE ---
+        # --- CACHE SENSOR DATA ---
         cam.marker_names = v_data.marker_names
         cam.distances = distances
         cam.azimuths = azimuths

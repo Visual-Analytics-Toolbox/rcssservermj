@@ -6,7 +6,7 @@ from rcsssmj.sim.sensors import Camera
 
 
 class VisionData:
-    """Encapsulates all necessary data for the vision pipeline."""
+    """Encapsulates pre-allocated memory buffers and metadata required by the vision pipeline."""
 
     def __init__(self, sensors: Mapping[str, Camera], marker_sites: list[str], marker_names: np.ndarray, owner_ids: np.ndarray, n_world_markers: int) -> None:
         self.sensors = sensors
@@ -15,6 +15,5 @@ class VisionData:
         self.owner_ids = owner_ids
         self.n_world_markers = n_world_markers
 
-        # Pré-alocação da memória para as posições 3D de todos os marcadores
         n_markers = len(marker_sites)
         self.obj_pos: np.ndarray = np.zeros((3, n_markers), dtype=np.float64)

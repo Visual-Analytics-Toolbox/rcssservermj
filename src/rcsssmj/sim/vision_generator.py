@@ -9,32 +9,31 @@ from rcsssmj.sim.sensors import Camera
 
 
 class VisionGenerator(ABC):
-    """Abstract base class for all vision generators."""
+    """Abstract base class for all vision generation models."""
 
     @abstractmethod
     def generate(self, v_sensor: Camera, observer_prefix: str) -> VisionPerception:
-        """Main method orchestrating the perception generation."""
+        """Main orchestrator method for converting sensor data into a VisionPerception object."""
 
 
 class OfficialVisionGenerator(VisionGenerator):
-    """Realistic implementation of vision rules, including neural network failures and noise."""
+    """Realistic vision model simulating physical sensor limits, computer vision noise, and neural network failures."""
 
     def __init__(
         self,
         fov_h: float = 60.0,  # horizontal field of view half-angle in degrees
         fov_v: float = 60.0,  # vertical field of view half-angle in degrees
-        dist_sigma: float = 0.01,  # standard deviation for distance noise (it scales proportionally to the object's distance)
+        dist_sigma: float = 0.01,  # standard deviation for distance noise (scales proportionally with distance)
         angle_sigma: float = 0.5,  # standard deviation for angle noise (azimuth and elevation) in degrees
-        fn_rate: float = 0.01,  # chance to lose a perfectly visible object (False Negative)
-        fp_rate: float = 0.001,  # chance PER FRAME to hallucinate a non-existent object
-        confusion_rate: float = 0.05,  # chance to misclassify an object (e.g., Goal as Ball)
-        send_unique_class_names: bool = True,  # If True, abbreviates world object names to a single uppercase letter. # noqa: FBT001, FBT002
-        decimal_position_precision: int = 2,  # Number of decimal places to truncate coordinates to.
-        max_number_of_false_positives: int = 5, # The absolute maximum number of hallucinations (fake objects) the camera can generate per frame.
+        fn_rate: float = 0.01,  # probability of failing to detect a fully visible object (False Negative)
+        fp_rate: float = 0.001,  # probability per frame of hallucinating a non-existent object (False Positive)
+        confusion_rate: float = 0.05,  # probability of misclassifying an object (e.g., Goal as Ball)
+        send_unique_class_names: bool = True,  # If True, abbreviate static world object names to a single uppercase letter # noqa: FBT001, FBT002
+        decimal_position_precision: int = 2,  # decimal precision for truncating coordinates to save bandwidth
+        max_number_of_false_positives: int = 5, # absolute maximum number of fake objects the camera can hallucinate per frame
     ):
         """
-        Initializes the OfficialVisionGenerator with specific configuration parameters.
-        These parameters control the camera constraints and the statistical error models.
+        Initializes the OfficialVisionGenerator with configured visual constraints and statistical error parameters.
         """
         self.fov_h = fov_h
         self.fov_v = fov_v
@@ -49,20 +48,20 @@ class OfficialVisionGenerator(VisionGenerator):
 
     def filter_fov(self, v_sensor: Camera) -> np.ndarray:
         """
-        Filters objects based on the camera's horizontal and vertical Field of View (FOV).
-        Returns a boolean mask where True means the object is within the FOV boundaries.
+        Filters objects against the camera's horizontal and vertical Field of View.
+        Returns a boolean mask where True indicates the object is within the FOV.
         """
         return (v_sensor.azimuths >= -self.fov_h) & (v_sensor.azimuths <= self.fov_h) & (v_sensor.elevations >= -self.fov_v) & (v_sensor.elevations <= self.fov_v)
 
     def apply_false_negatives(self, visibility_mask: np.ndarray) -> np.ndarray:
         """
-        Applies probability for the robot to miss an object.
-        This simulates failures in object detection algorithms (like YOLO).
+        Stochastically drops objects that are otherwise visible.
+        Simulates False Negatives typical of neural network object detectors (e.g., YOLO).
         """
         new_mask = visibility_mask.copy()
         n_items = len(new_mask)
 
-        # Failure to detect VISIBLE objects
+        # Drop truly visible objects based on fn_rate
         if self.fn_rate > 0:
             drops = np.random.random(n_items) < self.fn_rate
             new_mask[new_mask & drops] = False
@@ -71,24 +70,24 @@ class OfficialVisionGenerator(VisionGenerator):
 
     def generate_false_positives(self, all_world_names: np.ndarray) -> list[ObjectDetection]:
         """
-        Simulates neural network hallucinations by generating fake objects (false positives)
-        at random coordinates within the camera's Field of View.
+        Simulates network hallucinations by generating fake objects (False Positives).
+        The fake objects are placed at random coordinates within the camera's FOV.
         """
         obj_detections: list[ObjectDetection] = []
 
-        # Determine how many false positives occur in this frame based on probability
+        # Calculate the number of hallucinations occurring in this frame
         n_false_positives = np.sum(np.random.random(self.max_number_of_false_positives) < self.fp_rate)
 
-        # If no hallucination triggered, return an empty list immediately
+        # Fast exit if no hallucinations triggered
         if n_false_positives == 0:
             return obj_detections
 
-        # Generate random polar coordinates within the FOV limits and a valid distance range (0.5m to 15m)
+        # Generate fake polar coordinates bounded by the FOV and a plausible distance range [0.5m, 15.0m]
         fake_azis = np.random.uniform(-self.fov_h, self.fov_h, n_false_positives)
         fake_eles = np.random.uniform(-self.fov_v, self.fov_v, n_false_positives)
         fake_dists = np.random.uniform(0.5, 15.0, n_false_positives)
 
-        # Randomly pick the classes/names for these fake objects
+        # Assign random labels to the fake objects
         fake_names = np.random.choice(all_world_names, size=n_false_positives)
 
         for name, azi, ele, dist in zip(fake_names, fake_azis, fake_eles, fake_dists, strict=False):
@@ -101,20 +100,19 @@ class OfficialVisionGenerator(VisionGenerator):
 
     def apply_noise(self, distances: np.ndarray, azimuths: np.ndarray, elevations: np.ndarray) -> tuple:
         """
-        Applies Gaussian noise to the polar coordinates (distance, azimuth, elevation)
-        of the visible objects to simulate real-world sensor inaccuracies.
+        Applies Gaussian noise to the raw polar coordinates of visible objects,
+        representing real-world sensor inaccuracies and estimation errors.
         """
         n_visible = len(distances)
         if n_visible == 0:
             return distances, azimuths, elevations
 
-        # Generate Gaussian noise based on the configured standard deviations.
-        # Distance noise is proportional to the object's actual distance (further = noisier).
+        # Distance noise standard deviation is proportional to the object's actual distance
         dist_noise = np.random.normal(0.0, distances * self.dist_sigma, n_visible)
         azi_noise = np.random.normal(0.0, self.angle_sigma, n_visible)
         ele_noise = np.random.normal(0.0, self.angle_sigma, n_visible)
 
-        # Add noise to the original values. np.maximum ensures distance doesn't drop below 0.
+        # Apply the generated noise. np.maximum bounds distances at 0 to avoid physically impossible negative distances.
         noisy_dists = np.maximum(0.0, distances + dist_noise)
         noisy_azis = azimuths + azi_noise
         noisy_eles = elevations + ele_noise
@@ -123,63 +121,65 @@ class OfficialVisionGenerator(VisionGenerator):
 
     def _trunc(self, values: np.ndarray) -> np.ndarray:
         """
-        Helper function to truncate decimal values to the specified precision.
+        Utility function to truncate decimal values to the configured precision limit.
         """
         factor = 10**self.decimal_position_precision
         return cast('np.ndarray', np.trunc(values * factor) / factor)
 
     def generate(self, v_sensor: Camera, observer_prefix: str) -> VisionPerception:
         """
-        The main 'Template Method' that orchestrates the entire vision pipeline:
-        FOV filtering, occlusion handling, false negatives, noise, and formatting.
+        Template method orchestrating the complete vision synthesis pipeline:
+        FOV filtering, ground truth occlusion handling, statistical failures, noise injection, and struct formatting.
         """
         if v_sensor is None:
             return VisionPerception('See', [])
 
-        # 1. Evaluate Field of View (FOV)
+        # Step 1: Filter by absolute Field of View constraints
         fov_mask = self.filter_fov(v_sensor)
 
-        # 2. Filter out occluded objects and the robot's own body parts
+        # Step 2: Remove physically occluded objects and the observer's own body parts
         not_occluded = ~v_sensor.is_occluded
         visibility_mask = fov_mask & not_occluded & (v_sensor.owner_ids != observer_prefix)
 
-        # 3. Apply neural network failures (False Negatives)
+        # Step 3: Inject statistical object detection failures (False Negatives)
         final_mask = self.apply_false_negatives(visibility_mask)
 
         obj_detections: list[PObjectDetection] = []
         n_visible = np.count_nonzero(final_mask)
 
-        # Fetch the list of all possible world object names for confusion/hallucination logic
+        # Cache available static world object labels for hallucination/confusion logic later
         all_world_names = np.unique(v_sensor.marker_names[v_sensor.owner_ids == ''])
 
         # ---------------------------------------------------------------------
-        # 4. FALSE POSITIVES (Hallucinations)
+        # Step 4: Inject Hallucinations (False Positives)
         # ---------------------------------------------------------------------
         if self.fp_rate > 0 and len(all_world_names) > 0:
             false_positives = self.generate_false_positives(all_world_names)
             obj_detections.extend(false_positives)
 
-        # Process REAL visible objects, if any survived the filters:
+        # Process genuine visible objects that successfully passed all filters
         if n_visible > 0:
-            # Extract only the pure data that survived
+            # Mask out occluded/dropped targets and keep only surviving data
             v_dists = v_sensor.distances[final_mask]
             v_azis = v_sensor.azimuths[final_mask]
             v_eles = v_sensor.elevations[final_mask]
             v_names = v_sensor.marker_names[final_mask]
             v_owners = v_sensor.owner_ids[final_mask]
 
-            # 5. Apply Noise
+            # Step 5: Perturb coordinates with Gaussian noise
             n_dists, n_azis, n_eles = self.apply_noise(v_dists, v_azis, v_eles)
 
-            # Truncate floats to save network bandwidth
+            # Step 6: Truncate floats to reduce outgoing network bandwidth payload
             n_dists = self._trunc(n_dists)
             n_azis = self._trunc(n_azis)
             n_eles = self._trunc(n_eles)
 
-            # Create a mask to separate world static objects from dynamic agents
+            # Identify static world markers (flags, goals) versus dynamic agent body parts
             world_mask = v_owners == ''
 
-            # 6a. Real World Objects (With CLASS CONFUSION)
+            # ---------------------------------------------------------------------
+            # Step 7a: Process Genuine World Objects (Includes Class Confusion)
+            # ---------------------------------------------------------------------
             if np.any(world_mask):
                 for name, azi, ele, dist in zip(v_names[world_mask], n_azis[world_mask], n_eles[world_mask], n_dists[world_mask], strict=False):
                     final_name = name
@@ -193,21 +193,22 @@ class OfficialVisionGenerator(VisionGenerator):
                     obj_detections.append(ObjectDetection(final_name, azi, ele, dist))
 
         # ---------------------------------------------------------------------
-        # 6b. RANDOM SHIFT
+        # Step 7b: Shuffle detected objects
         # ---------------------------------------------------------------------
+        # Prevents clients from exploiting fixed object ordering in the perception string
         if len(obj_detections) > 0:
             n_shift = np.random.randint(0, len(obj_detections))
             obj_detections = obj_detections[-n_shift:] + obj_detections[:-n_shift]
 
         # ---------------------------------------------------------------------
-        # 6c. PLAYER PARTS
+        # Step 7c: Group Player Body Parts
         # ---------------------------------------------------------------------
         if n_visible > 0:
             unique_players = np.unique(v_owners[~world_mask])
             for p_prefix in unique_players:
                 p_mask = v_owners == p_prefix
 
-                # Extract team name and player number directly from the MuJoCo prefix string (e.g., 'r-red-1-')
+                # Parse team identifier and jersey number from the MuJoCo prefix string (e.g., 'r-red-1-')
                 prefix_parts = p_prefix.split('-')
                 team_name = prefix_parts[1]
                 player_no = int(prefix_parts[2])
