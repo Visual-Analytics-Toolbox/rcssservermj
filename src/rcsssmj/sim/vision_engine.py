@@ -52,14 +52,18 @@ def v_step(v_data: VisionData, mj_model: Any, mj_data: Any, check_occlusion: boo
     """Updates object positions in pre-allocated memory and calculates Ground Truth."""
     n_markers = len(v_data.marker_sites)
 
-    # 1. Update object positions into pre-allocated memory directly
+    # Update object positions into pre-allocated memory directly
     for idx, site_name in enumerate(v_data.marker_sites):
         v_data.obj_pos[:, idx] = mj_data.site(site_name).xpos.astype(np.float64)
 
     # Collision & Visual Geom Groups (Enables checking against both physics and visual layers)
     geomgroup = np.array([1, 1, 1, 1, 0, 0], dtype=np.uint8)
 
-    # 2. Update the vision for each camera directly
+    # Pre-fetch target body ids for all markers once per step (fast list comprehension -> numpy)
+    target_site_ids = np.array([mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_SITE, name) for name in v_data.marker_sites], dtype=np.int32)
+    target_body_ids = mj_model.site_bodyid[target_site_ids]
+
+    # Update the vision for each camera directly
     for camera_site_name, cam in v_data.sensors.items():
         observer_prefix = camera_site_name[:-6]
         logger.debug("--- Processing vision for observer: '%s' ---", observer_prefix)
@@ -82,60 +86,65 @@ def v_step(v_data: VisionData, mj_model: Any, mj_data: Any, check_occlusion: boo
 
         # --- NATIVE MUJOCO RAYCASTING ---
         if check_occlusion:
-            geomid_arr = np.zeros(1, dtype=np.int32)
+            # Vectorized calculations for all rays
+            ray_vecs = v_data.obj_pos.T - camera_pos  # (n_markers, 3)
+            ray_lengths = np.linalg.norm(ray_vecs, axis=1)
+            
+            valid_mask = ray_lengths >= 1e-4
+            
+            ray_dirs = np.zeros_like(ray_vecs)
+            ray_dirs[valid_mask] = ray_vecs[valid_mask] / ray_lengths[valid_mask, np.newaxis]
+            
+            # Flatten to ensure contiguous 1D array as expected by pybind
+            ray_dirs_flat = np.ascontiguousarray(ray_dirs, dtype=np.float64).flatten()
+            geomid_arr = np.full(n_markers, -1, dtype=np.int32)
+            dist_arr = np.full(n_markers, -1.0, dtype=np.float64)
+            
+            # Cast all rays at once
+            mujoco.mj_multiRay(
+                mj_model, mj_data, camera_pos, ray_dirs_flat, geomgroup, 
+                0, bodyexclude_id, geomid_arr, dist_arr, None, n_markers, -1.0
+            )
 
-            # Test occlusion for each world object (the Target)
-            for i in range(n_markers):
-                target_owner_prefix = v_data.owner_ids[i]
-                target_name = v_data.marker_names[i]
+            # Process raycast results completely vectorized
+            hit_something_mask = (0 <= dist_arr) & (dist_arr < ray_lengths - 0.05)
+            
+            # Extract bodies only for valid geoms to avoid out-of-bounds indexing
+            safe_geomid_arr = np.maximum(geomid_arr, 0)
+            hit_bodies = mj_model.geom_bodyid[safe_geomid_arr]
+            
+            valid_geom_mask = (geomid_arr != -1)
+            not_target_mask = (hit_bodies != target_body_ids)
 
-                ray_vec = v_data.obj_pos[:, i] - camera_pos
-                ray_length = np.linalg.norm(ray_vec)
+            # Mask is True if ray is valid, hit a geom, and that geom is NOT the target body
+            is_occluded_mask = valid_mask & hit_something_mask & valid_geom_mask & not_target_mask
 
-                # Skip if the object is exactly at the camera's origin
-                if ray_length < 1e-4:
-                    continue
-
-                ray_dir = ray_vec / ray_length
-
-                # Perform a single raycast from the camera to the target
-                dist = mujoco.mj_ray(mj_model, mj_data, camera_pos, ray_dir, geomgroup, 0, bodyexclude_id, geomid_arr)
-
-                # Check if we hit something before reaching the target (with a 5cm tolerance)
-                if 0 <= dist < ray_length - 0.05:
-                    hit_geom = geomid_arr[0]
-                    if hit_geom != -1:
-                        hit_body = mj_model.geom_bodyid[hit_geom]
-                        hit_body_name = mujoco.mj_id2name(mj_model, mujoco.mjtObj.mjOBJ_BODY, hit_body)
-
-                        hit_target = False
-
-                        # fetch the body ID to which the target marker (site) is physically attached
-                        target_site_name = v_data.marker_sites[i]
-                        target_site_id = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_SITE, target_site_name)
-                        target_body_id = mj_model.site_bodyid[target_site_id]
-
-                        if hit_body == target_body_id:
-                            hit_target = True
-
-                        if not hit_target:
+            # Optional extensive logging
+            if logger.isEnabledFor(logging.DEBUG):
+                for i in range(n_markers):
+                    if not valid_mask[i]:
+                        continue
+                    
+                    target_owner_prefix = v_data.owner_ids[i]
+                    target_name = v_data.marker_names[i]
+                    
+                    if hit_something_mask[i] and valid_geom_mask[i]:
+                        hit_body_name = mujoco.mj_id2name(mj_model, mujoco.mjtObj.mjOBJ_BODY, hit_bodies[i])
+                        if is_occluded_mask[i]:
                             logger.debug(
                                 "[%s] TARGET OCCLUDED: '%s' (owner: '%s') was blocked by '%s'",
                                 observer_prefix, target_name, target_owner_prefix, hit_body_name
                             )
-                            is_occluded_mask[i] = True
-                            
                         else:
                             logger.debug(
                                 "[%s] TARGET VISIBLE: '%s' (owner: '%s') - hit target's own body '%s'",
                                 observer_prefix, target_name, target_owner_prefix, hit_body_name
                             )
-
-                else:
-                    logger.debug(
-                        "[%s] TARGET VISIBLE: '%s' (owner: '%s') - clear line of sight",
-                        observer_prefix, target_name, target_owner_prefix
-                    )
+                    else:
+                        logger.debug(
+                            "[%s] TARGET VISIBLE: '%s' (owner: '%s') - clear line of sight",
+                            observer_prefix, target_name, target_owner_prefix
+                        )
 
         # --- SENSOR UPDATE ---
         cam.marker_names = v_data.marker_names
