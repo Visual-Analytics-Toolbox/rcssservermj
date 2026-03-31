@@ -74,7 +74,7 @@ class GameState:
     def play_time(self) -> float:
         """The current play time."""
 
-        return self._play_time
+        return self._play_time_ms / 1000.0
 
     @property
     def play_mode(self) -> PlayMode:

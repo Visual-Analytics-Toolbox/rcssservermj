@@ -1,5 +1,7 @@
 import logging
 import tempfile
+import threading
+import queue
 from collections.abc import Sequence
 
 import mujoco
@@ -21,10 +23,32 @@ class MsgpackLoggerMonitor(SimMonitor):
         self.file = open(self.filename, 'wb')
         self.model = None
         self.game_state: SoccerGameInformation | None = None
+        
+        self._queue = queue.Queue()
+        self._thread = threading.Thread(target=self._writer_thread, daemon=True)
+        self._thread.start()
+        
         logger.info(f"MsgpackLoggerMonitor initializing... Logging simulation data to {self.filename}")
+
+    def _writer_thread(self) -> None:
+        """Background thread handling all file I/O to avoid blocking the simulation loop via the GIL."""
+        while True:
+            msg = self._queue.get()
+            if msg is None:  # Sentinel value indicating shutdown
+                break
+                
+            self.file.write(len(msg).to_bytes(4, byteorder='little'))
+            self.file.write(msg)
+            self.file.flush()
 
     def shutdown(self) -> None:
         super().shutdown()
+        
+        # Stop the writer thread
+        if self._thread.is_alive():
+            self._queue.put(None)
+            self._thread.join(timeout=2.0)
+            
         if self.file and not self.file.closed:
             self.file.flush()
             self.file.close()
@@ -64,10 +88,8 @@ class MsgpackLoggerMonitor(SimMonitor):
                         "mjb": model_mjb
                     })
                 
-                # write length-prefix then binary msgpack string
-                self.file.write(len(msg).to_bytes(4, byteorder='little'))
-                self.file.write(msg)
-                self.file.flush()
+                # submit msg to the background writer queue
+                self._queue.put(msg)
 
             data = scene_graph.mj_data
             
@@ -90,5 +112,4 @@ class MsgpackLoggerMonitor(SimMonitor):
                 }
                 
             msg = msgpack.packb(state_dict)
-            self.file.write(len(msg).to_bytes(4, byteorder='little'))
-            self.file.write(msg)
+            self._queue.put(msg)
