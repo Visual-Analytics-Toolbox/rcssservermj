@@ -2,6 +2,7 @@ import logging
 import tempfile
 import threading
 import queue
+import os
 from collections.abc import Sequence
 
 import mujoco
@@ -32,14 +33,60 @@ class MsgpackLoggerMonitor(SimMonitor):
 
     def _writer_thread(self) -> None:
         """Background thread handling all file I/O to avoid blocking the simulation loop via the GIL."""
+        tmp_dir = "/dev/shm" if os.path.exists("/dev/shm") else None
+        
         while True:
-            msg = self._queue.get()
-            if msg is None:  # Sentinel value indicating shutdown
+            item = self._queue.get()
+            if item is None:
                 break
                 
-            self.file.write(len(msg).to_bytes(4, byteorder='little'))
-            self.file.write(msg)
-            self.file.flush()
+            msg_type = item.get("type")
+            
+            try:
+                if msg_type == "model_request":
+                    model = item["model"]
+                    try:
+                        with tempfile.NamedTemporaryFile(dir=tmp_dir, mode='w+', delete=True, suffix='.xml') as tmp:
+                            mujoco.mj_saveLastXML(tmp.name, model)
+                            tmp.seek(0)
+                            model_xml = tmp.read()
+                        
+                        msg = msgpack.packb({"type": "model", "xml": model_xml})
+                    except Exception:
+                        with tempfile.NamedTemporaryFile(dir=tmp_dir, mode='w+b', delete=True, suffix='.mjb') as tmp:
+                            mujoco.mj_saveModel(model, tmp.name)
+                            tmp.seek(0)
+                            model_mjb = tmp.read()
+                        msg = msgpack.packb({"type": "model_mjb", "mjb": model_mjb})
+                        
+                    self.file.write(len(msg).to_bytes(4, byteorder='little'))
+                    self.file.write(msg)
+                    self.file.flush()
+                    
+                elif msg_type == "state_data":
+                    state_dict = {
+                        "type": "state",
+                        "frame": item["frame"],
+                        "time": item["time"],
+                        "qpos": item["qpos"].tolist(),
+                        "qvel": item["qvel"].tolist()
+                    }
+                    if item["game_state"]:
+                        gs = item["game_state"]
+                        state_dict["game_state"] = {
+                            "left_team": gs.left_team,
+                            "right_team": gs.right_team,
+                            "left_score": gs.left_score,
+                            "right_score": gs.right_score,
+                            "play_time": gs.play_time,
+                            "play_mode": gs.play_mode,
+                        }
+                    
+                    msg = msgpack.packb(state_dict)
+                    self.file.write(len(msg).to_bytes(4, byteorder='little'))
+                    self.file.write(msg)
+            except Exception as e:
+                logger.error(f"Writer thread error: {e}")
 
     def shutdown(self) -> None:
         super().shutdown()
@@ -55,7 +102,6 @@ class MsgpackLoggerMonitor(SimMonitor):
 
     def update(self, state_info: Sequence[SimStateInformation], frame_id: int) -> None:
         scene_graph = None
-
         for info in state_info:
             if isinstance(info, SoccerGameInformation):
                 self.game_state = info
@@ -63,53 +109,22 @@ class MsgpackLoggerMonitor(SimMonitor):
                 scene_graph = info
 
         if scene_graph is not None:
+            #Check for Model Change
             if self.model is not scene_graph.mj_model:
                 self.model = scene_graph.mj_model
+                # Request model snapshot in background
+                self._queue.put({"type": "model_request", "model": self.model})
 
-                # Get the authoritative XML copy of the model
-                try:
-                    with tempfile.NamedTemporaryFile(mode='w+', delete=True, suffix='.xml') as tmp:
-                        mujoco.mj_saveLastXML(tmp.name, self.model)
-                        tmp.seek(0)
-                        model_xml = tmp.read()
-                    
-                    msg = msgpack.packb({
-                        "type": "model",
-                        "xml": model_xml
-                    })
-                except mujoco.FatalError:
-                    with tempfile.NamedTemporaryFile(mode='w+b', delete=True, suffix='.mjb') as tmp:
-                        mujoco.mj_saveModel(self.model, tmp.name)
-                        tmp.seek(0)
-                        model_mjb = tmp.read()
-                    
-                    msg = msgpack.packb({
-                        "type": "model_mjb",
-                        "mjb": model_mjb
-                    })
-                
-                # submit msg to the background writer queue
-                self._queue.put(msg)
-
+            # Extract state data
+            # Copy numpy arrays immediately to avoid thread-safety issues if main thread modifies them
             data = scene_graph.mj_data
-            
-            state_dict = {
-                "type": "state",
+            item = {
+                "type": "state_data",
                 "frame": frame_id,
                 "time": data.time,
-                "qpos": data.qpos.tolist(),
-                "qvel": data.qvel.tolist()
+                "qpos": data.qpos.copy(),
+                "qvel": data.qvel.copy(),
+                "game_state": self.game_state
             }
-            
-            if self.game_state is not None:
-                state_dict["game_state"] = {
-                    "left_team": self.game_state.left_team,
-                    "right_team": self.game_state.right_team,
-                    "left_score": self.game_state.left_score,
-                    "right_score": self.game_state.right_score,
-                    "play_time": self.game_state.play_time,
-                    "play_mode": self.game_state.play_mode,
-                }
-                
-            msg = msgpack.packb(state_dict)
-            self._queue.put(msg)
+            self._queue.put(item)
+
