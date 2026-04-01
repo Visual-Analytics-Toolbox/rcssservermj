@@ -11,22 +11,20 @@ from rcsssmj.sim.audio_engine import a_compile, a_forward, a_recompile, a_step
 from rcsssmj.sim.commands import MonitorCommand
 from rcsssmj.sim.perceptions import (
     AccelerometerPerception,
-    AgentDetection,
     GyroPerception,
     JointStatePerception,
     MicrophonePerception,
-    ObjectDetection,
     OrientationPerception,
     Perception,
-    PObjectDetection,
     PositionPerception,
     TimePerception,
     TouchPerception,
-    VisionPerception,
 )
 from rcsssmj.sim.sim_agent import SimAgent
 from rcsssmj.sim.sim_object import SimObject
 from rcsssmj.sim.state_info import SceneGraph, SimStateInformation
+from rcsssmj.sim.vision_engine import v_compile, v_recompile, v_step
+from rcsssmj.sim.vision_generator import OfficialVisionGenerator
 
 if TYPE_CHECKING:
     from rcsssmj.sim.audio_data import AudioData
@@ -43,6 +41,7 @@ class BaseSimulation(ABC):
         spec_provider: ModelSpecProvider | None = None,
         n_substeps: int = 4,
         vision_interval: int = 1,
+        check_occlusion: bool = True
     ) -> None:
         """Construct a new simulation.
 
@@ -66,6 +65,9 @@ class BaseSimulation(ABC):
 
         self.vision_interval: Final[int] = vision_interval
         """The interval (in simulation cycles) in which the vision perception is generated."""
+
+        self.check_occlusion: Final[bool] = check_occlusion
+        """ Whether to check for occlusions when generating vision perceptions."""
 
         self._frame_id: int = 0
         """The current simulation frame number."""
@@ -232,7 +234,10 @@ class BaseSimulation(ABC):
         self._a_data = a_compile(self._mj_spec)
 
         # extract visible object markers of world
-        self._world_markers = [(site.name, site.name[:-10]) for site in self._mj_spec.sites if site.name.endswith('-vismarker')]
+        self._v_data = v_compile(self._mj_spec)
+
+        # initialize vision generator
+        self._vision_generator = OfficialVisionGenerator()
 
         # reset frame id
         self._frame_id = 0
@@ -303,6 +308,9 @@ class BaseSimulation(ABC):
         # rebind objects
         for obj in self.sim_objects:
             obj.bind(self._mj_model, self._mj_data)
+
+        # recompile vision sensors
+        self._v_data = v_recompile(self._mj_spec, self._v_data)
 
     def step(self, monitor_commands: Sequence[MonitorCommand]) -> None:
         """Perform a simulation step.
@@ -385,17 +393,7 @@ class BaseSimulation(ABC):
         game_state_perception = self._generate_game_state_perception()
 
         if gen_vision:
-            # collect visible markers
-            n_world_markers = len(self._world_markers)
-            obj_markers = list(self._world_markers)
-            for player in agents:
-                obj_markers.extend(player.markers)
-
-            # extract visible object positions
-            n_markers = len(obj_markers)
-            obj_pos = np.zeros((3, n_markers), dtype=np.float64)
-            for idx, site in enumerate(obj_markers):
-                obj_pos[:, idx] = self._mj_data.site(site[0]).xpos.astype(np.float64)
+            v_step(self._v_data, self._mj_model, self._mj_data, self.check_occlusion)
 
         # generate agent specific perceptions
         for agent in agents:
@@ -464,53 +462,21 @@ class BaseSimulation(ABC):
 
                 other_msg_mask = [not s.startswith(agent.agent_id.prefix) for s in a_sensor.sources]
                 loss_msg_mask = np.random.rand(n_msgs) > packet_loss_rate_distance
-                msg_indices = cast(Sequence[int], np.nonzero(other_msg_mask & loss_msg_mask)[0])  # cast to int sequence as mypy complains about not being able to use a numpy array element for indexing
+                msg_indices = cast('Sequence[int]', np.nonzero(other_msg_mask & loss_msg_mask)[0])  # cast to int sequence as mypy complains about not being able to use a numpy array element for indexing
 
                 # filter messages for perception
-                azimuths = cast(Sequence[int], np.trunc(np.degrees(np.atan2(a_sensor.origins[1, msg_indices], a_sensor.origins[0, msg_indices])), dtype=np.int64))  # cast to int sequence as mypy complains about type mismatch
+                azimuths = cast('Sequence[int]', np.trunc(np.degrees(np.atan2(a_sensor.origins[1, msg_indices], a_sensor.origins[0, msg_indices])), dtype=np.int64))  # cast to int sequence as mypy complains about type mismatch
                 filtered_messages = [a_sensor.messages[idx] for idx in msg_indices]
                 agent_perceptions.append(MicrophonePerception(a_sensor.name[prefix_length:], azimuths, filtered_messages))
 
             # ideal camera sensor-pipeline
             if gen_vision:
-                # fetch camera sensor site
-                camera_site = self._mj_data.site(agent.agent_id.prefix + 'camera')
+                camera_site_name = agent.agent_id.prefix + 'camera'
+                cam = self._v_data.sensors.get(camera_site_name, None)
 
-                if camera_site is not None:
-                    # fetch pose of camera site of robot model
-                    camera_pos = camera_site.xpos.astype(np.float64)
-                    camera_rot = camera_site.xmat.astype(np.float64).reshape((3, 3))
-
-                    # transform detectable obj positions to camera frame
-                    local_obj_pos = np.matmul(camera_rot.T, obj_pos - camera_pos[:, np.newaxis])
-
-                    # transform local positions into polar coordinates
-                    azimuths = trunc2_vec(np.degrees(np.atan2(local_obj_pos[1], local_obj_pos[0])))
-                    distances = np.linalg.norm(local_obj_pos, axis=0)
-                    elevations = trunc2_vec(np.degrees(np.asin(local_obj_pos[2] / distances)))
-                    distances = trunc2_vec(distances)
-
-                    # TODO: Apply sensor noise
-
-                    # check object coordinates for horizontal and vertical view range
-                    half_horizontal_range = 60
-                    half_vertical_range = 60
-                    obj_visibility = (azimuths >= -half_horizontal_range) & (azimuths <= half_horizontal_range) & (elevations >= -half_vertical_range) & (elevations <= half_vertical_range)
-
-                    # extract simple world object detections
-                    obj_detections: list[PObjectDetection] = [ObjectDetection(obj_markers[i][1], azimuths[i], elevations[i], distances[i]) for i in range(n_world_markers) if obj_visibility[i]]
-
-                    # extract player object detections
-                    idx = n_world_markers
-                    for player in agents:
-                        n_player_markers = len(player.markers)
-                        player_detections = [ObjectDetection(obj_markers[i][1], azimuths[i], elevations[i], distances[i]) for i in range(idx, idx + n_player_markers) if obj_visibility[i]]
-                        if player_detections:
-                            obj_detections.append(AgentDetection('P', player.team_name, player.agent_id.player_no, player_detections))
-
-                        idx += n_player_markers
-
-                    agent_perceptions.append(VisionPerception('See', obj_detections))
+                if cam is not None:
+                    vision_perception = self._vision_generator.generate(cam, agent.agent_id.prefix)
+                    agent_perceptions.append(vision_perception)
 
             # forward generated perceptions to agent instance
             agent.set_perceptions(agent_perceptions)

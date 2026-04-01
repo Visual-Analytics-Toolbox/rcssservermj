@@ -61,3 +61,28 @@ class Microphone(CustomSensor):
 
         self.distances: NDArray[np.float64] = np.zeros(0, dtype=np.float64)
         """The distances to the audio origins."""
+
+
+class Camera(CustomSensor):
+    """A vision camera sensor."""
+
+    def __init__(self, name: str, site: str) -> None:
+        super().__init__(name, site)
+
+        self.marker_names: NDArray[np.str_] = np.zeros(0, dtype=np.str_)
+        """The names of the visible markers/objects."""
+
+        self.distances: NDArray[np.float64] = np.zeros(0, dtype=np.float64)
+        """The ground-truth distances to the objects."""
+
+        self.azimuths: NDArray[np.float64] = np.zeros(0, dtype=np.float64)
+        """The ground-truth azimuth angles to the objects."""
+
+        self.elevations: NDArray[np.float64] = np.zeros(0, dtype=np.float64)
+        """The ground-truth elevation angles to the objects."""
+
+        self.is_occluded: NDArray[np.bool_] = np.zeros(0, dtype=np.bool_)
+        """Flags indicating whether the object is occluded from this camera's perspective."""
+
+        self.owner_ids: NDArray[np.int_] = np.zeros(0, dtype=np.int_)
+        """IDs indicating if the object belongs to the world (-1) or to a specific agent."""
