@@ -521,8 +521,10 @@ Frequency
     Every Cycle.
 
 Noise Model
-    None.
-    TBD.
+    Messages longer than 10 bytes are discarded immediately.
+    From the remaining messages, the three loudest messages will always be received.
+    Messages quieter than the third loudest message (including messages from the opponent and the own message) have a chance to be lost.
+    The quieter a message is, the more likely it will not be transmitted.
 
 
 Message Format
