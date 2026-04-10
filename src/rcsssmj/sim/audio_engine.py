@@ -118,7 +118,7 @@ def a_forward(a_data: AudioData, mj_data: Any) -> None:
     for idx, source in enumerate(a_data.sources):
         a_data.origins[:, idx] = mj_data.site(a_data.actuators[source].site).xpos.astype(np.float64)
 
-    # generate senor information
+    # generate sensor information
     for mic in a_data.sensors.values():
         # fetch sensor pose
         s_site = mj_data.site(mic.site)
@@ -130,7 +130,9 @@ def a_forward(a_data: AudioData, mj_data: Any) -> None:
 
         # calculate volumes based on origin distances
         distances = np.linalg.norm(local_origins, axis=0)
-        s_volumes = a_data.volumes * np.pow(10, np.log2(np.maximum(distances, 1)) * -6 / 20)
+        # the current model does not limit the volume of a speaker in any way -> ignore it and use value 1 instead
+        reset_volumes = np.full(len(a_data.volumes), 1)
+        s_volumes = reset_volumes * np.pow(10, np.log2(np.maximum(distances, 1)) * -6 / 20)
 
         # set sensor information
         mic.messages = a_data.messages
