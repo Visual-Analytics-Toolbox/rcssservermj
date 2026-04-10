@@ -1,7 +1,10 @@
 import logging
+from itertools import chain
+from math import pi, sqrt
 from typing import cast
 
 from rcsssmj.games.soccer.play_mode import PlayMode
+from rcsssmj.games.soccer.sim.soccer_agent import SoccerAgent
 from rcsssmj.games.soccer.sim.soccer_game import PSoccerGame
 from rcsssmj.games.teams import TeamSide
 
@@ -257,8 +260,8 @@ class SoccerReferee:
         self._check_location_triggers()
         self._check_contact_triggers()
 
-        # relocate players (according to play mode restrictions)
-        self._relocate_misplaced_players()
+        # penalize misplaced players (according to play mode restrictions)
+        self._penalize_misplaced_players()
 
         # reset decision flag
         self._did_act = False
@@ -433,43 +436,118 @@ class SoccerReferee:
             self.play_on()
             return
 
-    def _relocate_misplaced_players(self) -> None:
-        """Check if players are within areas they are not allowed in and, in case, relocate them accordingly.
-
-        Parameter
-        ---------
-        mj_model: MjModel
-            The mujoco simulation model.
-
-        mj_data: MjData
-            The mujoco simulation data array.
-        """
+    def _penalize_misplaced_players(self) -> None:
+        """Check if players are within areas they are not allowed in and, in case, penalize them accordingly."""
 
         pm = self.game.game_state.play_mode
 
         if pm == PlayMode.KICK_OFF_LEFT:
-            # TODO: relocate all players of the left team that are on the right side and all players of the right team that are on the left side or within the middle circle
-            pass
+            self._check_placement_for_kick_off_left()
 
         elif pm == PlayMode.KICK_OFF_RIGHT:
-            # TODO: relocate all players of the right team that are on the left side and all players of the left team that are on the right side or within the middle circle
-            pass
+            self._check_placement_for_kick_off_right()
 
         elif pm == PlayMode.GOAL_KICK_LEFT:
-            # TODO: relocate all players of the right team that are within the left goalie area
-            pass
+            self._check_placement_for_goal_kick_left()
 
         elif pm == PlayMode.GOAL_KICK_RIGHT:
-            # TODO: relocate all players of the left team that are within the right goalie area
-            pass
-
-        elif pm in (PlayMode.THROW_IN_RIGHT, PlayMode.CORNER_KICK_RIGHT, PlayMode.FREE_KICK_RIGHT, PlayMode.DIRECT_FREE_KICK_RIGHT):
-            # TODO: relocate all players of the left team that are too close to the ball
-            pass
+            self._check_placement_for_goal_kick_right()
 
         elif pm in (PlayMode.THROW_IN_LEFT, PlayMode.CORNER_KICK_LEFT, PlayMode.FREE_KICK_LEFT, PlayMode.DIRECT_FREE_KICK_LEFT):
-            # TODO: relocate all players of the right team that are too close to the ball
-            pass
+            self._check_placement_for_free_kick_left()
+
+        elif pm in (PlayMode.THROW_IN_RIGHT, PlayMode.CORNER_KICK_RIGHT, PlayMode.FREE_KICK_RIGHT, PlayMode.DIRECT_FREE_KICK_RIGHT):
+            self._check_placement_for_free_kick_right()
+
+    def _check_placement_for_kick_off_left(self) -> None:
+        """Penalize all players of the left team that are on the right side and all players of the right team that are on the left side or within the middle circle."""
+
+        for agent in self.game.left_players.values():
+            if agent.xpos[0] > 0:
+                self._penalize(agent)
+
+        cc_radius = self.game.field.center_circle_radius
+        for agent in self.game.right_players.values():
+            if agent.xpos[0] < 0 or sqrt(agent.xpos[0] ** 2 + agent.xpos[1] ** 2) < cc_radius:
+                self._penalize(agent)
+
+    def _check_placement_for_kick_off_right(self) -> None:
+        """Penalize all players of the left team that are on the right side or within the middle circle and all players of the right team that are on the left side."""
+
+        cc_radius = self.game.field.center_circle_radius
+        for agent in self.game.left_players.values():
+            if agent.xpos[0] > 0 or sqrt(agent.xpos[0] ** 2 + agent.xpos[1] ** 2) < cc_radius:
+                self._penalize(agent)
+
+        for agent in self.game.right_players.values():
+            if agent.xpos[0] < 0:
+                self._penalize(agent)
+
+    def _check_placement_for_goal_kick_left(self) -> None:
+        """Penalize all players of the right team that are within the left goalie area."""
+
+        area = self.game.field.left_goalie_area
+
+        for agent in self.game.right_players.values():
+            if area.contains(agent.xpos[0], agent.xpos[1]):
+                self._penalize(agent)
+
+    def _check_placement_for_goal_kick_right(self) -> None:
+        """Penalize all players of the left team that are within the right goalie area."""
+
+        area = self.game.field.right_goalie_area
+
+        for agent in self.game.left_players.values():
+            if area.contains(agent.xpos[0], agent.xpos[1]):
+                self._penalize(agent)
+
+    def _check_placement_for_free_kick_left(self) -> None:
+        """Penalize all players of the right team that are within the center circle radius to the ball."""
+
+        ball_x = self.game.ball.xpos[0]
+        ball_y = self.game.ball.xpos[1]
+        cc_radius = self.game.field.center_circle_radius
+
+        for agent in self.game.right_players.values():
+            if sqrt((agent.xpos[0] - ball_x) ** 2 + (agent.xpos[1] - ball_y) ** 2) < cc_radius:
+                self._penalize(agent)
+
+    def _check_placement_for_free_kick_right(self) -> None:
+        """Penalize all players of the left team that are within the center circle radius to the ball."""
+
+        ball_x = self.game.ball.xpos[0]
+        ball_y = self.game.ball.xpos[1]
+        cc_radius = self.game.field.center_circle_radius
+
+        for agent in self.game.left_players.values():
+            if sqrt((agent.xpos[0] - ball_x) ** 2 + (agent.xpos[1] - ball_y) ** 2) < cc_radius:
+                self._penalize(agent)
+
+    def _penalize(self, player: SoccerAgent) -> None:
+        """Penalize the given player."""
+
+        # choose upper / lower field border based on ball position
+        y_side = -1 if self.game.ball.xpos[1] > 0 else 1
+
+        x = 0.0
+        y = y_side * ((self.game.field.field_dim[1] / 2) + self.game.field.field_border)
+
+        # check for free space in 2m steps
+        x_step = -2.0 if player.agent_id.team_id == TeamSide.LEFT.value else 2.0
+        is_occupied = True
+        while is_occupied:
+            x += x_step
+
+            # check location for collisions
+            # TODO: Extract other player locations once and vectorize distance calculations (should be more efficient even if the python for-loop may be early aborted).
+            for agent in chain(self.game.left_players.values(), self.game.right_players.values()):
+                if agent != player and sqrt((agent.xpos[0] - x) ** 2 + (agent.xpos[1] - y) ** 2) < 1.0:
+                    # other player is occupying the location already
+                    break
+            else:
+                is_occupied = False
+
+        player.drop_at(x, y, -pi * y_side / 2)
 
 
 class KickChallengeReferee(SoccerReferee):
@@ -523,6 +601,6 @@ class KickChallengeReferee(SoccerReferee):
         # no location triggers in challenge
         return
 
-    def _relocate_misplaced_players(self) -> None:
+    def _penalize_misplaced_players(self) -> None:
         # no misplacement of agents in challenges
         return
