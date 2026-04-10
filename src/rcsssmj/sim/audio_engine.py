@@ -83,10 +83,10 @@ def a_step(a_data: AudioData, mj_data: Any) -> None:
 
     # collect all messages broadcasted by speaker actuators
     for speaker in a_data.actuators.values():
-        if speaker.ctrl:
+        if speaker.ctrl and speaker.gainprm[0] > 0:
             messages.append(speaker.ctrl)
             sources.append(speaker.name)
-            volumes_arr.append(speaker.gainprm[0].astype(np.float64))
+            volumes_arr.append(np.minimum(speaker.gainprm[0], 1))
 
     # update state data
     a_data.messages = messages
@@ -130,9 +130,7 @@ def a_forward(a_data: AudioData, mj_data: Any) -> None:
 
         # calculate volumes based on origin distances
         distances = np.linalg.norm(local_origins, axis=0)
-        # the current model does not limit the volume of a speaker in any way -> ignore it and use value 1 instead
-        reset_volumes = np.full(len(a_data.volumes), 1)
-        s_volumes = reset_volumes * np.pow(10, np.log2(np.maximum(distances, 1)) * -6 / 20)
+        s_volumes = a_data.volumes * np.pow(10, np.log2(np.maximum(distances, 1)) * -6 / 20)
 
         # set sensor information
         mic.messages = a_data.messages
