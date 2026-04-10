@@ -453,19 +453,16 @@ class BaseSimulation(ABC):
                 n_msgs = len(a_sensor.messages)
 
                 other_msg_mask = [not s.startswith(agent.agent_id.prefix) for s in a_sensor.sources]
-                len_limit_msg_mask = [len(msg) < 10 for msg in a_sensor.messages]
+                len_limit_msg_mask = [len(msg) <= 10 for msg in a_sensor.messages]
 
-                if len(a_sensor.volumes) == 0:
-                    noise_floor = 0
-                elif len(a_sensor.volumes) < 3:
-                    noise_floor = np.sort(a_sensor.volumes)[0]
+                noise_volumes = a_sensor.volumes[len_limit_msg_mask]
+                if len(noise_volumes) <= 3:
+                    # always perceive the three loudest (valid) transmissions
+                    loss_msg_mask = np.full(n_msgs, True)
                 else:
-                    noise_floor = np.sort(a_sensor.volumes)[-3]
-                if noise_floor == 0:
-                    transmission_probabilities = np.full(len(a_sensor.volumes), 1)
-                else:
-                    transmission_probabilities = np.clip(np.log(a_sensor.volumes * (np.e - 1) / noise_floor + 1), 0, 1)
-                loss_msg_mask = np.random.rand(n_msgs) < transmission_probabilities
+                    # use third loudest (valid) transmission as noise floor value
+                    noise_floor = np.sort(noise_volumes)[-3]
+                    loss_msg_mask = np.random.rand(n_msgs) < np.clip(np.log(a_sensor.volumes * (np.e - 1) / noise_floor + 1), 0, 1)
 
                 msg_indices = cast(Sequence[int], np.nonzero(loss_msg_mask & other_msg_mask & len_limit_msg_mask)[0])  # cast to int sequence as mypy complains about not being able to use a numpy array element for indexing
 
