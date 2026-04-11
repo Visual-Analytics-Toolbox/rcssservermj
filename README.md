@@ -25,14 +25,14 @@ For more detailed installation instructions (virtual environments, installation 
 Start the soccer simulation server:
 
 ```bash
-rcssservermj -a 127.0.0.1 -c 60000 -m 60001
+rcssservermj --host 127.0.0.1 --aport 60000 --mport 60001
 ```
 
 CLI parameter:
 
-- `-a <ip>` to specify the server IP (default: 'localhost')
-- `-c <agent_port>` to specify the agent port (default: 60000)
-- `-m <monitor_port>` to specify the monitor port (default: 60001)
+- `--host <ip>` to specify the server IP (default: 'localhost')
+- `--aport <agent_port>` to specify the agent port (default: 60000)
+- `--mport <monitor_port>` to specify the monitor port (default: 60001)
 
 Stop the server: Simply <kbd>ctrl+c</kbd> the server process.
 
