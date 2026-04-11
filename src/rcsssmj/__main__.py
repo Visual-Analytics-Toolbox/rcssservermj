@@ -49,7 +49,7 @@ def soccer_sim() -> None:
 
     # game arguments
     parser.add_argument('--field',      help='The soccer field version.',                                type=str, choices=field_versions)
-    parser.add_argument('--rules',      help='The soccer rule book.',               default=SoccerRuleBooks.FIFA.value, type=str, choices=rule_books)
+    parser.add_argument('--rules',      help='The soccer rule book.',               default=SoccerRuleBooks.SSIM.value, type=str, choices=rule_books)
     # fmt: on
 
     args = parser.parse_args()
