@@ -101,10 +101,13 @@ class SimObject:
         self,
         pos: tuple[float, float, float],
         quat: tuple[float, float, float, float] | None = None,
+        *,
+        vel: tuple[float, float, float] | None = None,
+        ang_vel: tuple[float, float, float] | None = None,
     ) -> None:
-        """Place the object at the specified location.
+        """Place the object at the specified location with the specified velocity.
 
-        Note: This method will also reset the object velocities and accelerations to zero.
+        Note: This method will also reset the object accelerations to zero.
 
         Parameter
         ---------
@@ -113,13 +116,20 @@ class SimObject:
 
         quat: tuple[float, float, float, float] | None, default=None
             The target orientation. If ``None``, the "identity" quaternion is used.
+
+        vel: tuple[float, float, float] | None, default=None
+            The target linear velocity. If ``None``, the linear velocity is set to zero.
+
+        ang_vel: tuple[float, float, float] | None, default=None
+            The target angular velocity. If ``None``, the angular velocity is set to zero.
         """
 
         # set object state
         self._qpos[0:3] = pos
         self._qpos[3:7] = (1, 0, 0, 0) if quat is None else quat
 
-        self._qvel[0:6] = np.zeros(6)
+        self._qvel[0:3] = (0, 0, 0) if vel is None else vel
+        self._qvel[3:6] = (0, 0, 0) if ang_vel is None else ang_vel
         self._qacc[0:6] = np.zeros(6)
 
         # set derived state information

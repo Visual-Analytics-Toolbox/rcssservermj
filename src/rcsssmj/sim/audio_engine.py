@@ -83,10 +83,10 @@ def a_step(a_data: AudioData, mj_data: Any) -> None:
 
     # collect all messages broadcasted by speaker actuators
     for speaker in a_data.actuators.values():
-        if speaker.ctrl:
+        if speaker.ctrl and speaker.gainprm[0] > 0:
             messages.append(speaker.ctrl)
             sources.append(speaker.name)
-            volumes_arr.append(speaker.gainprm[0].astype(np.float64))
+            volumes_arr.append(np.minimum(speaker.gainprm[0], 1))
 
     # update state data
     a_data.messages = messages
@@ -118,7 +118,7 @@ def a_forward(a_data: AudioData, mj_data: Any) -> None:
     for idx, source in enumerate(a_data.sources):
         a_data.origins[:, idx] = mj_data.site(a_data.actuators[source].site).xpos.astype(np.float64)
 
-    # generate senor information
+    # generate sensor information
     for mic in a_data.sensors.values():
         # fetch sensor pose
         s_site = mj_data.site(mic.site)

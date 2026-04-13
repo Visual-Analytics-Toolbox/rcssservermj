@@ -29,9 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 def soccer_sim() -> None:
-    """
-    Main function for running the MuJoCo based Soccer Simulator.
-    """
+    """Main function for running the MuJoCo based Soccer Simulator."""
 
     # parse arguments
     parser = argparse.ArgumentParser(description='The RoboCup MuJoCo Soccer Simulation Server.')
@@ -41,17 +39,17 @@ def soccer_sim() -> None:
 
     # fmt: off
     # simulator arguments
-    parser.add_argument('-a', '--host',       help='The server address.',                 default='127.0.0.1', type=str)
-    parser.add_argument('-c', '--aport',      help='The agent port.',                     default=60000,       type=int)
-    parser.add_argument('-m', '--mport',      help='The monitor port.',                   default=60001,       type=int)
-    parser.add_argument('-S', '--sequential', help='Run sequential with agent clients.',  default=False,       action='store_true')
-    parser.add_argument('-s', '--sync',       help='Run synchronous with agent clients.', default=False,       action='store_true')
-    parser.add_argument('-r', '--realtime',   help='Run in real-time mode.',              default=True,        action=argparse.BooleanOptionalAction)
-    parser.add_argument('-v', '--render',     help='Start internal monitor viewer.',      default=True,        action=argparse.BooleanOptionalAction)
+    parser.add_argument('--host',       help='The server address.',                 default='127.0.0.1', type=str)
+    parser.add_argument('--aport',      help='The agent port.',                     default=60000,       type=int)
+    parser.add_argument('--mport',      help='The monitor port.',                   default=60001,       type=int)
+    parser.add_argument('--sequential', help='Run sequential with agent clients.',  default=False,       action='store_true')
+    parser.add_argument('--sync',       help='Run synchronous with agent clients.', default=False,       action='store_true')
+    parser.add_argument('--realtime',   help='Run in real-time mode.',              default=True,        action=argparse.BooleanOptionalAction)
+    parser.add_argument('--render',     help='Start internal monitor viewer.',      default=True,        action=argparse.BooleanOptionalAction)
 
     # game arguments
-    parser.add_argument('-f', '--field',      help='The soccer field version.',                                type=str, choices=field_versions)
-    parser.add_argument('-b', '--rules',      help='The soccer rule book.',               default=SoccerRuleBooks.FIFA.value, type=str, choices=rule_books)
+    parser.add_argument('--field',      help='The soccer field version.',                                type=str, choices=field_versions)
+    parser.add_argument('--rules',      help='The soccer rule book.',               default=SoccerRuleBooks.SSIM.value, type=str, choices=rule_books)
     # fmt: on
 
     args = parser.parse_args()

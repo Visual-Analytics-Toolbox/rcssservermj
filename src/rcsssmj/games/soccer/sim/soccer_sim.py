@@ -630,8 +630,7 @@ class SoccerSimulation(BaseSimulation):
             The ball velocity.
         """
 
-        self.ball.place_at(pos)
-        # TODO: Set velocity...
+        self.ball.place_at(pos, vel=vel)
 
     def request_place_player(
         self,

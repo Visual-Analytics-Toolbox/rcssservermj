@@ -18,20 +18,8 @@ class SoccerFieldVersions(Enum):
     FIFA = 'fifa'
     """Official FIFA soccer field."""
 
-    HL_ADULT = 'hl_adult'
-    """Latest version of the RoboCup Humanoid Adult Size League soccer field."""
-
-    HL_ADULT_2014 = 'hl_adult_2014'
-    """2014 version of the RoboCup Humanoid Adult Size League soccer field."""
-
-    HL_ADULT_2019 = 'hl_adult_2019'
-    """2019 version of the RoboCup Humanoid Adult Size League soccer field."""
-
-    HL_ADULT_2020 = 'hl_adult_2020'
-    """2020 version of the RoboCup Humanoid Adult Size League soccer field."""
-
-    SIM3D_7VS7 = 'sim3d_7vs7'
-    """3D simulation version of the 7 vs 7 soccer field."""
+    FIFA_7_VS_7 = 'fifa7vs7'
+    """Official FIFA 7 vs 7 soccer field."""
 
     @staticmethod
     def from_value(version: str) -> SoccerFieldVersions:
@@ -51,14 +39,8 @@ def create_soccer_field(version: str) -> SoccerField:
 
     version_id = SoccerFieldVersions.from_value(version)
 
-    if version_id == SoccerFieldVersions.HL_ADULT_2014:
-        return HLAdult2014SoccerField()
-    if version_id == SoccerFieldVersions.HL_ADULT_2019:
-        return HLAdult2019SoccerField()
-    if version_id in (SoccerFieldVersions.HL_ADULT_2020, SoccerFieldVersions.HL_ADULT):
-        return HLAdult2020SoccerField()
-    if version_id == SoccerFieldVersions.SIM3D_7VS7:
-        return Sim3D7vs7SoccerField()
+    if version_id == SoccerFieldVersions.FIFA_7_VS_7:
+        return FIFA7vs7SoccerField()
 
     # cases: FIFA and UNKNOWN
     return FIFASoccerField()
@@ -193,74 +175,11 @@ class FIFASoccerField(SoccerField):
 
 
 @dataclass
-class HLAdult2014SoccerField(SoccerField):
-    """Official RoboCup Humanoid Adult Size League soccer field specification used from 2014 until 2018."""
-
-    def __init__(self) -> None:
-        """Construct a new RCHL-Adult 2014 soccer field description."""
-
-        super().__init__(
-            field_dim=(9, 6, 40),
-            line_width=0.05,
-            field_border=2,  # min 0.7m
-            goal_dim=(0.6, 2.6, 1.8),
-            goal_post_radius=0.05,  # new in 2017: diameter <= 12cm
-            goalie_area_dim=(1, 2.6 + 2 * 1.2),
-            penalty_area_dim=None,  # none specified
-            corner_area_radius=0,  # none specified
-            penalty_spot_distance=2.1,
-            center_circle_radius=0.75,
-        )
-
-
-@dataclass
-class HLAdult2019SoccerField(SoccerField):
-    """Official RoboCup Humanoid Adult Size League soccer field specification used in 2019."""
-
-    def __init__(self) -> None:
-        """Construct a new RCHL-Adult 2019 soccer field description."""
-
-        super().__init__(
-            field_dim=(14, 9, 40),
-            line_width=0.05,
-            field_border=2,  # min 1m
-            goal_dim=(0.6, 2.6, 1.8),
-            goal_post_radius=0.05,  # diameter <= 12cm
-            goalie_area_dim=(1, 2.6 + 2 * 1.2),
-            penalty_area_dim=None,  # none specified
-            corner_area_radius=0,  # none specified
-            penalty_spot_distance=2.1,
-            center_circle_radius=1.5,
-        )
-
-
-@dataclass
-class HLAdult2020SoccerField(SoccerField):
-    """Official RoboCup Humanoid Adult Size League soccer field specification used since 2020 until now."""
-
-    def __init__(self) -> None:
-        """Construct a new RCHL-Adult 2020 soccer field description."""
-
-        super().__init__(
-            field_dim=(14, 9, 40),
-            line_width=0.05,
-            field_border=2,  # min 1m
-            goal_dim=(0.6, 2.6, 1.8),
-            goal_post_radius=0.05,  # 8cm <= diameter <= 12cm
-            goalie_area_dim=(1, 2.6 + 2 * 0.7),
-            penalty_area_dim=(3, 2.6 + 2 * 1.7),
-            corner_area_radius=0,  # none specified
-            penalty_spot_distance=2.1,
-            center_circle_radius=1.5,
-        )
-
-
-@dataclass
-class Sim3D7vs7SoccerField(SoccerField):
+class FIFA7vs7SoccerField(SoccerField):
     """Official FIFA soccer field specification for 7 vs 7 games."""
 
     def __init__(self) -> None:
-        """Construct a new FIFA soccer field."""
+        """Construct a new FIFA 7 vs 7 soccer field."""
 
         super().__init__(
             field_dim=(55, 36, 40),  # official  7vs7 measures - z height is arbitrary
