@@ -21,14 +21,8 @@ class SoccerRuleBooks(Enum):
     SSIM = 'ssim'
     """Latest version of the RoboCup Soccer Simulation League competition rule book."""
 
-    SSIM_2025 = 'ssim_2025'
-    """2025 version of the RoboCup Soccer Simulation League competition rule book."""
-
-    HL_ADULT = 'hl_adult'
-    """Latest version of the RoboCup Humanoid Adult Size League competition rule book."""
-
-    HL_ADULT_2025 = 'hl_adult_2025'
-    """2025 version of the RoboCup Humanoid Adult Size League competition rule book."""
+    SSIM_26 = 'ssim26'
+    """2026 version of the RoboCup Soccer Simulation League competition rule book."""
 
     @staticmethod
     def from_value(name: str) -> SoccerRuleBooks:
@@ -48,10 +42,8 @@ def create_soccer_rule_book(name: str) -> SoccerRules:
 
     name_id = SoccerRuleBooks.from_value(name)
 
-    if name_id in (SoccerRuleBooks.SSIM_2025, SoccerRuleBooks.SSIM):
-        return SSim2025Rules()
-    if name_id in (SoccerRuleBooks.HL_ADULT_2025, SoccerRuleBooks.HL_ADULT):
-        return HLAdult2025Rules()
+    if name_id in (SoccerRuleBooks.SSIM_26, SoccerRuleBooks.SSIM):
+        return SSim2026Rules()
 
     # cases: FIFA and UNKNOWN
     return FIFASoccerRules()
@@ -110,27 +102,15 @@ class FIFASoccerRules(SoccerRules):
 
 
 @dataclass(frozen=True)
-class SSim2025Rules(SoccerRules):
-    """2025 version of the official RoboCup Soccer Simulation League rule book."""
+class SSim2026Rules(SoccerRules):
+    """2026 version of the official RoboCup Soccer Simulation League rule book."""
 
     def __init__(self) -> None:
-        """Construct a new RCSSim 2025 rule book."""
+        """Construct a new RCSSim 2026 rule book."""
 
         super().__init__(
+            max_team_size=7,
             half_time=5 * 60,
             extra_half_time=3 * 60,
-        )
-
-
-@dataclass(frozen=True)
-class HLAdult2025Rules(SoccerRules):
-    """2025 version of the official RoboCup Humanoid Adult Size League rule book."""
-
-    def __init__(self) -> None:
-        """Construct a new RCHL-Adult 2025 rule book."""
-
-        super().__init__(
-            half_time=10 * 60,
-            extra_half_time=5 * 60,
-            default_field_version=SoccerFieldVersions.HL_ADULT_2020,
+            default_field_version=SoccerFieldVersions.FIFA_7_VS_7,
         )

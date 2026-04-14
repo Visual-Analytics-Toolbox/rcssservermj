@@ -37,7 +37,7 @@ General time perceptor, usually used to perceive the simulation / world time.
 | **time**    | float | seconds | The time.                                             |
 +-------------+-------+---------+-------------------------------------------------------+
 | :py:class:`rcsssmj.sim.perceptions.TimePerception`                                    |
-+-------------+-------------+-----------+-----------------------------------------------+
++-------------+-------+---------+-------------------------------------------------------+
 
 Frequency
     Every cycle.
@@ -83,7 +83,7 @@ Virtual perceptor, representing the position of an object in the world.
 | **z**       | float | meter | The z-coordinate of the position.                       |
 +-------------+-------+-------+---------------------------------------------------------+
 | :py:class:`rcsssmj.sim.perceptions.PositionPerception`                                |
-+-------------+-------------+-----------+-----------------------------------------------+
++-------------+-------+-------+---------------------------------------------------------+
 
 Frequency
     Every cycle.
@@ -130,7 +130,7 @@ Virtual perceptor, representing the orientation of an object in the world.
 | **qz**      | float |      | The z-coordinate of the orientation quaternion.            |
 +-------------+-------+------+------------------------------------------------------------+
 | :py:class:`rcsssmj.sim.perceptions.OrientationPerception`                               |
-+-------------+-------------+-----------+-------------------------------------------------+
++-------------+-------+------+------------------------------------------------------------+
 
 Frequency
     Every cycle.
@@ -175,7 +175,7 @@ Perceptor representing a gyro-rate sensor.
 | **rz**      | float | deg / sec | The rotational velocity around the z-axis.          |
 +-------------+-------+-----------+-----------------------------------------------------+
 | :py:class:`rcsssmj.sim.perceptions.GyroPerception`                                    |
-+-------------+-------------+-----------+-----------------------------------------------+
++-------------+-------+-----------+-----------------------------------------------------+
 
 Frequency
     Every cycle.
@@ -220,7 +220,7 @@ Perceptor representing an accelerometer sensor.
 | **az**      | float | m / sec^2 | The acceleration along the z-axis.                  |
 +-------------+-------+-----------+-----------------------------------------------------+
 | :py:class:`rcsssmj.sim.perceptions.AccelerometerPerception`                           |
-+-------------+-------------+-----------+-----------------------------------------------+
++-------------+-------+-----------+-----------------------------------------------------+
 
 Frequency
     Every cycle.
@@ -307,7 +307,7 @@ Perceptor representing a touch / bumper sensor.
 |             |      |      | - everything else for active contact.                     |
 +-------------+------+------+-----------------------------------------------------------+
 | :py:class:`rcsssmj.sim.perceptions.TouchPerception`                                   |
-+-------------+-------------+-----------+-----------------------------------------------+
++-------------+------+------+-----------------------------------------------------------+
 
 Frequency
     Every cycle.
@@ -357,7 +357,7 @@ The (soccer) game state perceptor.
 | **score right** | int   | goals   | The score (number of goals) of the right team.    |
 +-----------------+-------+---------+---------------------------------------------------+
 | :py:class:`rcsssmj.games.soccer.sim.soccer_perceptions.GameStatePerception`           |
-+-------------+-------------+-----------+-----------------------------------------------+
++-----------------+-------+---------+---------------------------------------------------+
 
 Available play modes are specified in :py:class:`rcsssmj.games.soccer.play_mode.PlayMode`.
 
@@ -464,7 +464,7 @@ S-Expression:
     Point object detection:
         .. code::
 
-            (<name> (pol <azimuth> <elevation> <distance>))
+            (<name> (pol <distance> <azimuth> <elevation>))
 
     Agent detection:
         .. code::
@@ -513,7 +513,7 @@ As such, it perceives detected messages, possibly accompanied with some directio
 | **message** | str   |      | The received Base64-encoded message.                              |
 +-------------+-------+------+-------------------------------------------------------------------+
 | :py:class:`rcsssmj.sim.perceptions.MicrophonePerception`                                       |
-+-------------+-------------+-----------+--------------------------------------------------------+
++-------------+-------+------+-------------------------------------------------------------------+
 
 For more information see :ref:`Speaker Effector <agent-protocol_speaker-effector>`.
 
@@ -521,8 +521,10 @@ Frequency
     Every Cycle.
 
 Noise Model
-    None.
-    TBD.
+    Messages longer than 10 bytes are discarded immediately.
+    From the remaining messages, the three loudest messages will always be received.
+    Messages quieter than the third loudest message (including messages from the opponent and the own message) have a chance to be lost.
+    The quieter a message is, the more likely it will not be transmitted.
 
 
 Message Format
