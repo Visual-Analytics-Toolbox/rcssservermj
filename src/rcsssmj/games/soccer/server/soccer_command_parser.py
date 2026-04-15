@@ -25,7 +25,7 @@ class SoccerCommandParser(DefaultCommandParser):
             return self._parse_kick_off_command(node)
 
         if node[0] == b'playMode':
-            return self._parse_play_mode_command(node)
+            self._parse_play_mode_command(node)
 
         if node[0] == b'ball':
             return self._parse_ball_command(node)
