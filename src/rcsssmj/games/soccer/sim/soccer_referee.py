@@ -462,11 +462,24 @@ class SoccerReferee:
     def _check_placement_for_kick_off_left(self) -> None:
         """Penalize all players of the left team that are on the right side and all players of the right team that are on the left side or within the middle circle."""
 
+        cc_radius = self.game.field.center_circle_radius
+        kickoff_agent = None
+        kickoff_agent_dist = cc_radius
         for agent in self.game.left_players.values():
             if agent.xpos[0] > 0:
-                self._penalize(agent)
+                # agent is in opponent half --> check if it is the closest agent to the center
+                dist_to_center = sqrt(agent.xpos[0] ** 2 + agent.xpos[1] ** 2)
+                if dist_to_center > kickoff_agent_dist:
+                    # not kickoff agent or outside the center circle --> penalize
+                    self._penalize(agent)
+                else:
+                    # closer to center as the kickoff agent --> penalize previously considered kickoff agent
+                    if kickoff_agent is not None:
+                        self._penalize(kickoff_agent)
 
-        cc_radius = self.game.field.center_circle_radius
+                    kickoff_agent = agent
+                    kickoff_agent_dist = dist_to_center
+
         for agent in self.game.right_players.values():
             if agent.xpos[0] < 0 or sqrt(agent.xpos[0] ** 2 + agent.xpos[1] ** 2) < cc_radius:
                 self._penalize(agent)
@@ -479,9 +492,22 @@ class SoccerReferee:
             if agent.xpos[0] > 0 or sqrt(agent.xpos[0] ** 2 + agent.xpos[1] ** 2) < cc_radius:
                 self._penalize(agent)
 
+        kickoff_agent = None
+        kickoff_agent_dist = cc_radius
         for agent in self.game.right_players.values():
             if agent.xpos[0] < 0:
-                self._penalize(agent)
+                # agent is in opponent half --> check if it is the closest agent to the center
+                dist_to_center = sqrt(agent.xpos[0] ** 2 + agent.xpos[1] ** 2)
+                if dist_to_center > kickoff_agent_dist:
+                    # not kickoff agent or outside the center circle --> penalize
+                    self._penalize(agent)
+                else:
+                    # closer to center as the kickoff agent --> penalize previously considered kickoff agent
+                    if kickoff_agent is not None:
+                        self._penalize(kickoff_agent)
+
+                    kickoff_agent = agent
+                    kickoff_agent_dist = dist_to_center
 
     def _check_placement_for_goal_kick_left(self) -> None:
         """Penalize all players of the right team that are within the left goalie area."""
