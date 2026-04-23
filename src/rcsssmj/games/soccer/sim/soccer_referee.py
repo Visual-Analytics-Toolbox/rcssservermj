@@ -271,7 +271,9 @@ class SoccerReferee:
 
         active_ball_contact = self.game.ball.active_contact
         last_ball_contact = self.game.ball.last_contact
+        last_ball_contact_change = self.game.ball.contact_change
         agent_na_touch_ball = self.game.game_state.agent_na_touch_ball
+        sim_time = self.game.game_state.sim_time
 
         # check no score rule
         if self.game.game_state.team_na_score is not None and active_ball_contact is not None and last_ball_contact is not None:
@@ -280,10 +282,11 @@ class SoccerReferee:
         # check double-touch rule
         if agent_na_touch_ball is not None and active_ball_contact is not None and last_ball_contact is not None:
             if agent_na_touch_ball == last_ball_contact and agent_na_touch_ball == active_ball_contact:
-                self.free_kick(TeamSide.get_opposing_side(agent_na_touch_ball.team_id))
-                return
-
-            self.game.game_state.agent_na_touch_ball = None
+                if last_ball_contact_change is not None and sim_time - last_ball_contact_change > 1:
+                    self.free_kick(TeamSide.get_opposing_side(agent_na_touch_ball.team_id))
+                    return
+            else:
+                self.game.game_state.agent_na_touch_ball = None
 
     def _check_timeouts(self) -> None:
         """Check timeouts (kick-off time, throw-in time, etc.) for the current play mode."""
