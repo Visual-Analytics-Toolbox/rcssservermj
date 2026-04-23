@@ -64,7 +64,8 @@ class SoccerBall(SimObject):
         """
 
         if self._active_contact is not None:
-            self._last_contact = self._active_contact
+            if self._active_contact != contact:
+                self._last_contact = self._active_contact
 
         self._active_contact = contact
 
