@@ -24,6 +24,9 @@ class SoccerBall(SimObject):
         self._last_contact: AgentID | None = None
         """The previous agent contact (updated after the active contact has changed / has been lost)."""
 
+        self._contact_change: float | None = None
+        """The timestep when the active agent contact changed last."""
+
     @property
     def radius(self) -> float:
         """The radius of the ball."""
@@ -42,6 +45,12 @@ class SoccerBall(SimObject):
 
         return self._last_contact
 
+    @property
+    def contact_change(self) -> float | None:
+        """The timestep when the agent contact changed last."""
+
+        return self._contact_change
+
     def init(self, mj_spec: Any, mj_model: Any, mj_data: Any, radius: float = 0.11) -> None:
         """(Re-)Initialize the ball instance."""
 
@@ -53,19 +62,28 @@ class SoccerBall(SimObject):
         self._radius = radius
         self._active_contact = None
         self._last_contact = None
+        self._contact_change = None
 
-    def _set_active_contact(self, contact: AgentID | None) -> None:
+    def _set_active_contact(self, contact: AgentID | None, sim_time: float) -> None:
         """Set the currently active agent contact.
 
         Parameter
         ---------
         contact: AgentID | None
             The agent currently in contact with the ball or None if there is no such contact at the moment.
+
+        sim_time: float
+            The current simulation time.
         """
 
         if self._active_contact is not None:
             if self._active_contact != contact:
                 self._last_contact = self._active_contact
+                if contact is not None:
+                    self._contact_change = sim_time
+        else:
+            if contact is not None and self._last_contact != contact:
+                self._contact_change = sim_time
 
         self._active_contact = contact
 
@@ -79,6 +97,7 @@ class SoccerBall(SimObject):
 
         self._active_contact = None
         self._last_contact = None
+        self._contact_change = None
 
     def post_step(self, mj_model: Any, mj_data: Any) -> None:
         super().post_step(mj_model, mj_data)
@@ -87,9 +106,9 @@ class SoccerBall(SimObject):
         ball_contacts = filter_agent_contacts_with('ball', mj_model, mj_data)
         if ball_contacts:
             if self._active_contact not in ball_contacts:
-                self._set_active_contact(next(iter(ball_contacts)))
+                self._set_active_contact(next(iter(ball_contacts)), mj_data.time)
         else:
-            self._set_active_contact(None)
+            self._set_active_contact(None, mj_data.time)
 
     def drop(self) -> None:
         """Drop the ball at its current location and reset all contacts."""
