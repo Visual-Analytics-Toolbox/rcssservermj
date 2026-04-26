@@ -101,7 +101,7 @@ def render_jersey_texture(
 
     y0 = (height - sh) // 2
     x0 = (width - sw) // 2
-    region = canvas[y0:y0 + sh, x0:x0 + sw]
+    region = canvas[y0 : y0 + sh, x0 : x0 + sw]
     mask = scaled.astype(bool)
     region[mask] = fg
 

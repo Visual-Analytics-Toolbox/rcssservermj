@@ -81,9 +81,8 @@ class SoccerBall(SimObject):
                 self._last_contact = self._active_contact
                 if contact is not None:
                     self._contact_change = sim_time
-        else:
-            if contact is not None and self._last_contact != contact:
-                self._contact_change = sim_time
+        elif contact is not None and self._last_contact != contact:
+            self._contact_change = sim_time
 
         self._active_contact = contact
 
