@@ -248,7 +248,7 @@ class SoccerReferee:
         self.game.game_state.update(self.game.sim_time, progress_play_time=self.game.game_state.play_mode not in (PlayMode.BEFORE_KICK_OFF, PlayMode.GAME_OVER))
 
         # check game over
-        if self.game.game_state.play_time >= self.game.rules.half_time:
+        if self.game.game_state.play_time >= self.game.rules.get_end_time_for(self.game.game_state.phase):
             self.game_over()
             return
 

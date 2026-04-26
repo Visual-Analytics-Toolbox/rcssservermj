@@ -3,6 +3,7 @@ import logging
 import signal
 from types import FrameType
 
+from rcsssmj.games.soccer.game_phase import GamePhase
 from rcsssmj.games.soccer.server.soccer_server import SoccerSimServer
 from rcsssmj.games.soccer.sim.soccer_referee import SoccerReferee
 from rcsssmj.games.soccer.sim.soccer_sim import SoccerSimulation
@@ -36,9 +37,10 @@ def soccer_sim() -> None:
 
     rule_books = [str(book.value) for book in SoccerRuleBooks if book != SoccerRuleBooks.UNKNOWN]
     field_versions = [str(version.value) for version in SoccerFieldVersions if version != SoccerFieldVersions.UNKNOWN]
+    game_phases = [phase.value for phase in GamePhase]
 
     # fmt: off
-    # simulator arguments
+    # server arguments
     parser.add_argument('--host',       help='The server address.',                 default='127.0.0.1', type=str)
     parser.add_argument('--aport',      help='The agent port.',                     default=60000,       type=int)
     parser.add_argument('--mport',      help='The monitor port.',                   default=60001,       type=int)
@@ -47,23 +49,41 @@ def soccer_sim() -> None:
     parser.add_argument('--realtime',   help='Run in real-time mode.',              default=True,        action=argparse.BooleanOptionalAction)
     parser.add_argument('--render',     help='Start internal monitor viewer.',      default=True,        action=argparse.BooleanOptionalAction)
 
-    # game arguments
-    parser.add_argument('--field',      help='The soccer field version.',                                type=str, choices=field_versions)
-    parser.add_argument('--rules',      help='The soccer rule book.',               default=SoccerRuleBooks.SSIM.value, type=str, choices=rule_books)
+    # simulator / game arguments
+    parser.add_argument('--field',       help='The soccer field version.',                                                                type=str, choices=field_versions)
+    parser.add_argument('--rules',       help='The soccer rule book.',                                default=SoccerRuleBooks.SSIM.value, type=str, choices=rule_books)
+    parser.add_argument('--phase',       help='The game phase (0=first  half, 1=second half, etc.).', default=0,                          type=int, choices=game_phases)
+    parser.add_argument('--time',        help='The initial play time in seconds.',                                                        type=float)
     # fmt: on
 
     args = parser.parse_args()
 
-    # create game referee
+    # simulation parameter
     rule_book = create_soccer_rule_book(args.rules)
-    if args.field is None:
-        args.field = rule_book.default_field_version.value
-    soccer_field = create_soccer_field(args.field)
+    soccer_field = create_soccer_field(rule_book.default_field_version.value if args.field is None else args.field)
     referee = SoccerReferee()
-    sim = SoccerSimulation(soccer_field, rule_book, referee)
+    initial_game_phase = GamePhase.from_value(args.phase)
+
+    # create simulation
+    sim = SoccerSimulation(
+        field=soccer_field,
+        rules=rule_book,
+        referee=referee,
+        initial_game_phase=initial_game_phase,
+        initial_play_time=args.time,
+    )
 
     # create server
-    server = SoccerSimServer(sim, args.host, args.aport, args.mport, sequential_mode=args.sequential, sync_mode=args.sync, real_time=args.realtime, render=args.render)
+    server = SoccerSimServer(
+        sim=sim,
+        host=args.host,
+        agent_port=args.aport,
+        monitor_port=args.mport,
+        sequential_mode=args.sequential,
+        sync_mode=args.sync,
+        real_time=args.realtime,
+        render=args.render,
+    )
 
     # register SIGINT handler
     def signal_handler(sig: int, frame: FrameType | int | signal.Handlers | None) -> None:

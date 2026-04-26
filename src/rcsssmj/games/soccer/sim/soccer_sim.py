@@ -8,6 +8,7 @@ from typing import Any, Final
 import mujoco
 import numpy as np
 
+from rcsssmj.games.soccer.game_phase import GamePhase
 from rcsssmj.games.soccer.sim.soccer_agent import SoccerAgent
 from rcsssmj.games.soccer.sim.soccer_ball import SoccerBall
 from rcsssmj.games.soccer.sim.soccer_game_state import GameState
@@ -38,6 +39,9 @@ class SoccerSimulation(BaseSimulation):
         field: SoccerField,
         rules: SoccerRules | None = None,
         referee: SoccerReferee | None = None,
+        *,
+        initial_game_phase: GamePhase = GamePhase.FIRST_HALF,
+        initial_play_time: float | None = None,
     ) -> None:
         """Construct a new simulation sever.
 
@@ -51,6 +55,12 @@ class SoccerSimulation(BaseSimulation):
 
         referee: SoccerReferee | None, default=None
             The soccer referee managing the game aspect of the simulation.
+
+        initial_game_phase: GamePhase, default=GamePhase.FIRST_HALF
+            The initial game phase.
+
+        initial_play_time: float | None, default=None
+            The initial play time or ``None`` for game phase related start time.
         """
 
         super().__init__(vision_interval=2)
@@ -64,7 +74,10 @@ class SoccerSimulation(BaseSimulation):
         self.referee: Final[SoccerReferee] = SoccerReferee() if referee is None else referee
         """The game referee responsible for managing the soccer game aspect of the simulation."""
 
-        self.game_state: Final[GameState] = GameState()
+        # determine initial play time
+        play_time = initial_play_time if initial_play_time is not None else self.rules.get_start_time_for(initial_game_phase)
+
+        self.game_state: Final[GameState] = GameState(initial_game_phase, play_time)
         """The current soccer game state."""
 
         self.ball: Final[SoccerBall] = SoccerBall()
@@ -117,16 +130,8 @@ class SoccerSimulation(BaseSimulation):
         if not super().init():
             return False
 
-        # reset soccer simulation states
-        self.game_state.reset()
-        self._team_players[TeamSide.LEFT.value].clear()
-        self._team_players[TeamSide.RIGHT.value].clear()
-
         # initialize ball
         self.ball.init(self._mj_spec, self._mj_model, self._mj_data)
-
-        # initialize referee
-        self.referee.reset()
 
         return True
 
