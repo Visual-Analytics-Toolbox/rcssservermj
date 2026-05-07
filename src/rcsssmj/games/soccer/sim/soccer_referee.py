@@ -3,6 +3,9 @@ from itertools import chain
 from math import pi, sqrt
 from typing import cast
 
+import mujoco
+import numpy as np
+
 from rcsssmj.games.soccer.play_mode import PlayMode
 from rcsssmj.games.soccer.sim.soccer_agent import SoccerAgent
 from rcsssmj.games.soccer.sim.soccer_game import PSoccerGame
@@ -278,7 +281,11 @@ class SoccerReferee:
         # check no score rule
         if self.game.game_state.team_na_score is not None and active_ball_contact is not None and last_ball_contact is not None:
             self.game.game_state.team_na_score = None
-
+        
+        # check hand touch foul
+        if self.__check_hand_foul():
+            self.direct_free_kick(TeamSide.get_opposing_side(active_ball_contact.team_id))
+        
         # check double-touch rule
         if agent_na_touch_ball is not None and active_ball_contact is not None and last_ball_contact is not None:
             if agent_na_touch_ball == last_ball_contact and agent_na_touch_ball == active_ball_contact:
@@ -287,6 +294,174 @@ class SoccerReferee:
                     return
             else:
                 self.game.game_state.agent_na_touch_ball = None
+
+    def __check_hand_foul(self) -> bool:
+        active_ball_contact = self.game.ball.active_contact
+        body_parts = self.game.ball.active_contact_body_parts
+
+        # ==================================================
+        # If the ball is in contact with any hand or forearm
+        # =================================================
+        if body_parts is not None and any('hand' in part or 'forearm' in part for part in body_parts):
+            logger.info('='*20)
+            logger.info('Ball is in contact with hand or forearm')
+
+            # Exceptions
+            agent = self.game.get_players(active_ball_contact.team_id)[active_ball_contact.player_no]
+            mj_model = getattr(self.game, 'mj_model', None)
+            mj_data = getattr(self.game, 'mj_data', None)
+
+            is_foul = True
+
+            if mj_model is not None and mj_data is not None:
+                # ================================================================================
+                # If the agent is the goalie and the ball is in its penalty area, it is not a foul
+                # ================================================================================
+                if agent.agent_id.player_no == 1:
+                    ball_x, ball_y = self.game.ball.xpos[0], self.game.ball.xpos[1]
+                    if agent.agent_id.team_id == TeamSide.LEFT.value:
+                        if self.game.field.left_penalty_area.contains(ball_x, ball_y):
+                            is_foul = False
+                    elif agent.agent_id.team_id == TeamSide.RIGHT.value:
+                        if self.game.field.right_penalty_area.contains(ball_x, ball_y): 
+                            is_foul = False
+
+                if is_foul:
+                    # ==========================================
+                    # Collect hand geometries
+                    # ==========================================
+                    hand_geoms = []
+                    for part in body_parts:
+                        if 'hand' in part or 'forearm' in part:
+                            gid = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_GEOM, part)
+                            if gid >= 0:
+                                hand_pos = np.array(mj_data.geom_xpos[gid])
+                                h_len = max(mj_model.geom_size[gid][0], mj_model.geom_size[gid][1])
+                                h_rad = min(mj_model.geom_size[gid][0], mj_model.geom_size[gid][1])
+                                hand_geoms.append((hand_pos, h_len, h_rad))
+
+                    if hand_geoms:
+                        # Get Torso pos and orientation
+                        torso_geom_id = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_GEOM, agent.agent_id.prefix + 'torso')
+                        if torso_geom_id >= 0:
+                            torso_r = mj_model.geom_size[torso_geom_id][0] 
+                            torso_pos = np.array(mj_data.geom_xpos[torso_geom_id])
+                        else:
+                            torso_x_size = 0.15
+                            torso_y_size = 0.15
+                            torso_body_id = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_BODY, agent.root_body_name)
+                            torso_pos = np.array(mj_data.xpos[torso_body_id])
+
+                        # Find head position
+                        head_pos = torso_pos + np.array([0.0, 0.0, 0.25]) # Fallback
+                        for i in range(mj_model.ngeom):
+                            name = mujoco.mj_id2name(mj_model, mujoco.mjtObj.mjOBJ_GEOM, i)
+                            if name and agent.agent_id.prefix in name and 'head' in name:
+                                head_pos = np.array(mj_data.geom_xpos[i])
+                                break
+
+                        head_z = head_pos[2]
+                        is_fallen = head_z < 0.45
+                        is_near_body = False
+                        epsilon = 0.05 if not is_fallen else 0.10
+                        
+                        for hp, h_len, h_rad in hand_geoms:
+                            distance = np.linalg.norm(hp - torso_pos)
+                            max_natural_distance = torso_x_size + h_len*2 + epsilon
+                            
+                            if distance <= max_natural_distance:
+                                is_near_body = True
+                                break
+
+                        is_extended = False
+                        torso_body_id = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_BODY, agent.root_body_name)
+                        torso_xmat = np.array(mj_data.xmat[torso_body_id]).reshape(3, 3)
+
+                        # Calcula o limite do eixo X baseado no tamanho do braço superior (ombro até cotovelo)
+                        head_local = torso_xmat.T @ (head_pos - torso_pos)
+                        head_z_local = abs(head_local[2])
+                        tolerancia_x = head_z_local * 0.6  # Fallback
+
+                        shoulder_id = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_BODY, agent.agent_id.prefix + 'AL1')
+                        elbow_id = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_BODY, agent.agent_id.prefix + 'AL3')
+                        
+                        if shoulder_id >= 0 and elbow_id >= 0:
+                            shoulder_pos = np.array(mj_data.xpos[shoulder_id])
+                            elbow_pos = np.array(mj_data.xpos[elbow_id])
+                            
+                            shoulder_local = torso_xmat.T @ (shoulder_pos - torso_pos)
+                            upper_arm_length = np.linalg.norm(shoulder_pos - elbow_pos)
+                            # O limite X é a posição X do ombro + o tamanho do braço superior
+                            tolerancia_x = abs(shoulder_local[0]) + upper_arm_length
+                            logger.info('Tolerancia x: %f', tolerancia_x)
+
+                        extended_x = False
+                        extended_y = False
+                        extended_z = False
+
+                        torso_body_id = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_BODY, agent.root_body_name)
+                        torso_xmat = np.array(mj_data.xmat[torso_body_id]).reshape(3, 3)
+
+                        if is_fallen:
+                            logger.info('Agent is fallen')
+                            for hp, h_len, h_rad in hand_geoms:
+                                hand_local = torso_xmat.T @ (hp - torso_pos)
+                                
+                                # X: Profundidade do peito + comprimento total do braço (permite o braço esticar na corrida/queda)
+                                tolerancia_x_dinamica = torso_x_size + h_len
+                                # Y: Largura física exata do torso + 2x espessura do braço (extremidade física máxima relaxada)
+                                tolerancia_y_dinamica = torso_y_size + (h_rad * 3)
+                                
+                                ext_x = abs(hand_local[0]) > tolerancia_x_dinamica
+                                ext_y = abs(hand_local[1]) > tolerancia_y_dinamica
+                                
+                                if ext_x: extended_x = True
+                                if ext_y: extended_y = True
+                                
+                                if ext_x or ext_y:
+                                    is_extended = True
+                                    break
+
+                        else:
+                            logger.info('Agent is standing')
+                            head_local = torso_xmat.T @ (head_pos - torso_pos)
+                            head_z_local = abs(head_local[2])
+
+                            for hp, h_len, h_rad in hand_geoms:
+                                hand_local = torso_xmat.T @ (hp - torso_pos)
+                                
+                                tolerancia_x_dinamica = torso_x_size + h_len
+                                tolerancia_y_dinamica = torso_y_size + (h_rad * 3)
+                                
+                                ext_x = abs(hand_local[0]) > tolerancia_x_dinamica
+                                ext_y = abs(hand_local[1]) > tolerancia_y_dinamica
+                                ext_z = hp[2] > head_pos[2]
+                                
+                                if ext_x: extended_x = True
+                                if ext_y: extended_y = True
+                                if ext_z: extended_z = True
+                                
+                                if ext_x or ext_y or ext_z:
+                                    is_extended = True
+                                    break
+
+                        logger.info('Extensao Eixo X (Frente/Tras): %s', extended_x)
+                        logger.info('Extensao Eixo Y (Lados): %s', extended_y)
+                        logger.info('Extensao Eixo Z (Acima da Cabeca): %s', extended_z)
+                        logger.info('is_extended: %s', is_extended)                            
+                        if not is_extended:
+                            is_foul = False
+                        # else:
+                        #     # =================================================
+                        #     # If the hand is near to the body, it is not a foul
+                        #     # =================================================
+                        #     if is_near_body:
+                        #         is_foul = False
+            
+            logger.info('is_foul: %s', is_foul)
+            return is_foul
+            
+        return False
 
     def _check_timeouts(self) -> None:
         """Check timeouts (kick-off time, throw-in time, etc.) for the current play mode."""

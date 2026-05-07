@@ -30,7 +30,7 @@ class Client:
 
     BEAM_POSES: ClassVar[Mapping[int, tuple[float, float, float]]] = {
         1: (29.0, 0.0, 0),
-        2: (22.0, 12.0, 0),
+        2: (2.0, 0.125, 0),
         3: (22.0, 4.0, 0),
         4: (22.0, -4.0, 0),
         5: (22.0, -12.0, 0),
@@ -113,20 +113,37 @@ class Client:
         # logger.info('Initialization complete.')
 
         logger.info('Running perception-action-loop.')
+        
+        motors = self.ROBOT_MOTORS[self._model_name]
+        current_positions = {m: 0.0 for m in motors}
+        
         while True:
             try:
                 # receive perception message
                 perception_msg = self._receive_message()
                 # print(perception_msg.decode())
 
-                # perform action
-                motors = self.ROBOT_MOTORS[self._model_name]
-                actions = np.random.uniform(-1, 1, len(motors))  # random action
-                # actions = np.zeros(len(motors))  # zero action
+                # Motor mapping for neutral pose (in degrees)
+                target_positions = {m: 0.0 for m in motors}
+                
+                if self._model_name in ('T1', 'K1'):
+                    # ShoulderRoll: -89.954 for left, 89.954 for right
+                    target_positions['lae2'] = -89.954
+                    target_positions['rae2'] = 89.954
+                    target_positions['lae1'] = -20
+                    target_positions['rae1'] = -20
+                    # target_positions['']
 
                 msg_list: list[str] = []
-                for motor, action in zip(motors, actions, strict=False):
-                    msg_list.append(f'({motor} 0.0 0.0 0.0 0.0 {action:.2f})')
+                for motor in motors:
+                    target_pos = target_positions.get(motor, 0.0)
+                    
+                    # Interpolação suave: aproxima a posição atual do alvo em passos pequenos (2% a cada ciclo)
+                    current_positions[motor] += (target_pos - current_positions[motor]) * 0.02
+                    
+                    # Formato: (nome pos_graus vel_graus kp kd torque_ff)
+                    # Note: O torque_ff (último parâmetro) deve ser 0.0 para não explodir a simulação com força contínua
+                    msg_list.append(f'({motor} {current_positions[motor]:.3f} 0.0 150.0 1.0 0.0)')
 
                 if not self._has_beamed:
                     # msg_list.append('(beam ' + ' '.join([str(val) for val in self.BEAM_POSES[self.player_id]]) + ')')
