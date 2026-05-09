@@ -137,7 +137,7 @@ class SoccerSimulation(BaseSimulation):
 
     def _create_world(self) -> Any | None:
         # load world specification
-        world_spec = self.spec_provider.load_environment('soccer')
+        world_spec = self.spec_provider.load_environment_spec('soccer', 'world')
         if world_spec is None:
             return None
 
@@ -432,7 +432,7 @@ class SoccerSimulation(BaseSimulation):
         """
 
         # try to load the robot model requested by the agent
-        robot_spec = self.spec_provider.load_robot(params.model_name)
+        robot_spec = self.spec_provider.load_robot_spec(params.model_name)
         if robot_spec is None:
             # failed to load the requested model --> report failure
             return None
