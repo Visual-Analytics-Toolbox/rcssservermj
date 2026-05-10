@@ -27,34 +27,43 @@
     <material name="team" rgba="0.4 0.4 0.4 1"/>
     <material name="transparent" rgba="0.5 0.5 0.5 1"/>
 
+    <!-- unique parts (non-symmetric) -->
     <mesh name="base_link" file="base_link.STL"/>
-    <mesh name="r_hip_pitch_link" file="r_hip_pitch_link.STL"/>
-    <mesh name="r_hip_roll_link" file="r_hip_roll_link.STL"/>
-    <mesh name="r_thigh_link" file="r_thigh_link.STL"/>
-    <mesh name="r_calf_link" file="r_calf_link.STL"/>
-    <mesh name="r_ankle_pitch_link" file="r_ankle_pitch_link.STL"/>
-    <mesh name="r_ankle_roll_link" file="r_ankle_roll_link.STL"/>
-    <mesh name="l_hip_pitch_link" file="l_hip_pitch_link.STL"/>
-    <mesh name="l_hip_roll_link" file="l_hip_roll_link.STL"/>
-    <mesh name="l_thigh_link" file="l_thigh_link.STL"/>
-    <mesh name="l_calf_link" file="l_calf_link.STL"/>
-    <mesh name="l_ankle_pitch_link" file="l_ankle_pitch_link.STL"/>
-    <mesh name="l_ankle_roll_link" file="l_ankle_roll_link.STL"/>
     <mesh name="waist_yaw_link" file="waist_yaw_link.STL"/>
     <mesh name="torso_link" file="torso_link.STL"/>
-    <mesh name="r_shoulder_pitch_link" file="r_shoulder_pitch_link.STL"/>
-    <mesh name="r_shoulder_roll_link" file="r_shoulder_roll_link.STL"/>
-    <mesh name="r_upper_arm_link" file="r_upper_arm_link.STL"/>
-    <mesh name="r_elbow_link" file="r_elbow_link.STL"/>
-    <mesh name="r_wrist_link" file="r_wrist_link.STL"/>
-    <mesh name="l_shoulder_pitch_link" file="l_shoulder_pitch_link.STL"/>
-    <mesh name="l_shoulder_roll_link" file="l_shoulder_roll_link.STL"/>
-    <mesh name="l_upper_arm_link" file="l_upper_arm_link.STL"/>
-    <mesh name="l_elbow_link" file="l_elbow_link.STL"/>
-    <mesh name="l_wrist_link" file="l_wrist_link.STL"/>
     <mesh name="head_yaw_link" file="head_yaw_link.STL"/>
     <mesh name="head_pitch_link" file="head_pitch_link.STL"/>
     <mesh name="camera_link" file="camera_link.STL"/>
+
+    <!-- left leg parts -->
+    <mesh name="hip_pitch_link" file="hip_pitch_link.STL"/>
+    <mesh name="hip_roll_link" file="hip_roll_link.STL"/>
+    <mesh name="thigh_link" file="thigh_link.STL"/>
+    <mesh name="calf_link" file="calf_link.STL"/>
+    <mesh name="ankle_pitch_link" file="ankle_pitch_link.STL"/>
+    <mesh name="ankle_roll_link" file="ankle_roll_link.STL"/>
+
+    <!-- right leg parts (mirrored from left) -->
+    <mesh name="r_hip_pitch_link" file="hip_pitch_link.STL" scale="1 -1 1"/>
+    <mesh name="r_hip_roll_link" file="hip_roll_link.STL" scale="1 -1 1"/>
+    <mesh name="r_thigh_link" file="thigh_link.STL" scale="1 -1 1"/>
+    <mesh name="r_calf_link" file="calf_link.STL" scale="1 -1 1"/>
+    <mesh name="r_ankle_pitch_link" file="ankle_pitch_link.STL" scale="1 -1 1"/>
+    <mesh name="r_ankle_roll_link" file="ankle_roll_link.STL" scale="1 -1 1"/>
+
+    <!-- left arm parts -->
+    <mesh name="shoulder_pitch_link" file="shoulder_pitch_link.STL"/>
+    <mesh name="shoulder_roll_link" file="shoulder_roll_link.STL"/>
+    <mesh name="upper_arm_link" file="upper_arm_link.STL"/>
+    <mesh name="elbow_link" file="elbow_link.STL"/>
+    <mesh name="wrist_link" file="wrist_link.STL"/>
+
+    <!-- right arm parts (mirrored from left) -->
+    <mesh name="r_shoulder_pitch_link" file="shoulder_pitch_link.STL" scale="1 -1 1"/>
+    <mesh name="r_shoulder_roll_link" file="shoulder_roll_link.STL" scale="1 -1 1"/>
+    <mesh name="r_upper_arm_link" file="upper_arm_link.STL" scale="1 -1 1"/>
+    <mesh name="r_elbow_link" file="elbow_link.STL" scale="1 -1 1"/>
+    <mesh name="r_wrist_link" file="wrist_link.STL" scale="1 -1 1"/>
   </asset>
 
   <worldbody>
@@ -111,32 +120,32 @@
       <body name="l_hip_pitch_link" pos="0 0.0475 -0.0435">
         <inertial pos="7.921e-05 0.0319025 -0.0001562" quat="0.497171 0.489511 -0.578693 0.422273" mass="0.459318" diaginertia="0.000279904 0.000271819 0.000264407"/>
         <joint name="l_hip_pitch_joint" pos="0 0 0" axis="0 1 0" range="-3.12 2.94" actuatorfrcrange="-21 21" damping="0.02"/>
-        <geom class="visual" material="gray" mesh="l_hip_pitch_link"/>
+        <geom class="visual" material="gray" mesh="hip_pitch_link"/>
         <body name="l_hip_roll_link" pos="0 0.034 0">
           <inertial pos="0.00087873 1.341e-05 -0.0584583" quat="0.702052 0.056967 0.0602688 0.70728" mass="0.558201" diaginertia="0.000740475 0.000627166 0.00040724"/>
           <joint name="l_hip_roll_joint" pos="0 0 0" axis="1 0 0" range="-0.17 3.14" actuatorfrcrange="-21 21" damping="0.02"/>
-          <geom class="visual" material="gray" mesh="l_hip_roll_link"/>
+          <geom class="visual" material="gray" mesh="hip_roll_link"/>
           <body name="l_thigh_link" pos="-0.00035 0 -0.0974">
             <inertial pos="0.00071587 0.00075215 -0.0208406" quat="0.710169 0.70371 0.0141108 -0.015948" mass="0.154842" diaginertia="0.000187829 0.000161177 0.000100564"/>
             <joint name="l_thigh_joint" pos="0 0 0" axis="0 0 1" range="-2.87 2.87" actuatorfrcrange="-21 21" damping="0.02"/>
-            <geom class="visual" material="gray" mesh="l_thigh_link"/>
+            <geom class="visual" material="gray" mesh="thigh_link"/>
             <geom class="collision" name="l_thigh" size="0.035 0.0275" pos="0 0 0.065" type="cylinder"/>
             <body name="l_calf_link" pos="0 0 -0.045">
               <inertial pos="-1.001e-05 0.00237048 -0.0666125" quat="0.999997 0.000796813 -0.00130207 0.00164731" mass="0.858523" diaginertia="0.00416944 0.00414652 0.000429275"/>
               <joint name="l_calf_joint" pos="0 0 0" axis="0 1 0" range="-2.14 2.35" actuatorfrcrange="-21 21" damping="0.02"/>
-              <geom class="visual" material="gray" mesh="l_calf_link"/>
+              <geom class="visual" material="gray" mesh="calf_link"/>
               <geom class="collision" name="l_calf" size="0.0275 0.0275 0.0275" quat="0.707388 0.706825 0 0" type="box"/>
               <geom class="collision" name="l_calf_box" size="0.005 0.01 0.0275" pos="0 0 -0.065" type="box"/>
               <body name="l_ankle_pitch_link" pos="0 0 -0.14">
                 <inertial pos="0.00503044 -0.00051345 -0.00016685" quat="0.00108772 0.710445 0.00435661 0.703738" mass="0.163526" diaginertia="0.00028931 0.000208237 0.000115362"/>
                 <joint name="l_ankle_pitch_joint" pos="0 0 0" axis="0 1 0" range="-0.92 0.97" actuatorfrcrange="-21 21" damping="0.02"/>
-                <geom class="visual" material="gray" mesh="l_ankle_pitch_link"/>
+                <geom class="visual" material="gray" mesh="ankle_pitch_link"/>
                 <geom class="collision" name="l_ankle_pitch" size="0.035 0.035 0.021" pos="0.0035 0 0" type="box"/>
                 <body name="l_ankle_roll_link" pos="0.051 0 0">
                   <site name="lfoot-vismarker" pos="0 0 0"/>
                   <inertial pos="0.00456214 8.211e-05 -0.0125654" quat="0.563454 0.425204 0.421185 0.569494" mass="0.616626" diaginertia="0.00150793 0.00140979 0.000471117"/>
                   <joint name="l_ankle_roll_joint" pos="0 0 0" axis="1 0 0" range="-0.78 0.78" actuatorfrcrange="-21 21" damping="0.02"/>
-                  <geom class="visual" material="gray" mesh="l_ankle_roll_link"/>
+                  <geom class="visual" material="gray" mesh="ankle_roll_link"/>
                   <geom class="collision" name="l_foot" size="0.03 0.03 0.021" pos="0.028 0 0" type="box"/>
                   <geom class="collision" name="l_foot_c1" size="0.01 0.065" pos="-0.017 -0.025 -0.04" quat="0.707105 0 0.707108 0" type="cylinder"/>
                   <geom class="collision" name="l_foot_c2" size="0.01 0.082" pos="-0.0272 -0.009 -0.04" quat="0.707105 0 -0.707108 0" type="cylinder"/>
@@ -195,23 +204,23 @@
           <body name="l_shoulder_pitch_link" pos="0 0.1084 0.11698">
             <inertial pos="-0.00215543 0.0172048 0.00022511" quat="0.0355111 0.707216 -0.0147967 0.70595" mass="0.139352" diaginertia="0.00014525 0.000122217 7.54432e-05"/>
             <joint name="l_shoulder_pitch_joint" pos="0 0 0" axis="0 1 0" range="-4.18 1.04" actuatorfrcrange="-10 10" damping="0.02"/>
-            <geom class="visual" material="gray" mesh="l_shoulder_pitch_link"/>
+            <geom class="visual" material="gray" mesh="shoulder_pitch_link"/>
             <body name="l_shoulder_roll_link" pos="0 0.038 0">
               <inertial pos="-0.00140359 0.00022205 -0.024888" quat="0.658223 -0.023097 -0.0218074 0.752153" mass="0.55615" diaginertia="0.000522159 0.000514351 0.00015235"/>
               <joint name="l_shoulder_roll_joint" pos="0 0 0" axis="1 0 0" range="-0.13 3.14" actuatorfrcrange="-10 10" damping="0.02"/>
-              <geom class="visual" material="gray" mesh="l_shoulder_roll_link"/>
+              <geom class="visual" material="gray" mesh="shoulder_roll_link"/>
               <body name="l_upper_arm_link" pos="0 0 -0.0724">
                 <inertial pos="-0.00013535 0.00129534 -0.0121342" quat="0.786804 0.617162 -0.00567645 0.00431653" mass="0.153183" diaginertia="0.000177157 0.000144033 0.00011178"/>
                 <joint name="l_upper_arm_joint" pos="0 0 0" axis="0 0 1" range="-2.16 2.16" actuatorfrcrange="-10 10" damping="0.02"/>
-                <geom class="visual" material="gray" mesh="l_upper_arm_link"/>
+                <geom class="visual" material="gray" mesh="upper_arm_link"/>
                 <geom class="collision" name="l_upper_arm" size="0.035 0.0475" pos="0 0 0.025" type="cylinder"/>
                 <body name="l_elbow_link" pos="0 0 -0.038">
                   <inertial pos="-5.422e-05 0.00312726 -0.00211549" quat="0.705312 0.708745 -0.00907225 0.0115636" mass="0.313175" diaginertia="0.000107669 9.77316e-05 9.33597e-05"/>
                   <joint name="l_elbow_joint" pos="0 0 0" axis="0 1 0" range="-2 2" actuatorfrcrange="-10 10" damping="0.02"/>
-                  <geom class="visual" material="gray" mesh="l_elbow_link"/>
+                  <geom class="visual" material="gray" mesh="elbow_link"/>
                   <body name="l_wrist_link" pos="0 0 -0.029">
                     <inertial pos="3.045e-05 4.83e-06 -0.0407825" quat="0.707163 -0.000330349 -0.00046236 0.70705" mass="0.0751806" diaginertia="0.00011823 0.00011809 1.10499e-05"/>
-                    <geom class="visual" material="gray" mesh="l_wrist_link"/>
+                    <geom class="visual" material="gray" mesh="wrist_link"/>
                     <geom class="collision" name="l_wrist" size="0.008 0.015" pos="0 0 -0.035" type="cylinder"/>
                     <geom class="collision" name="l_hand" size="0.0175" pos="0 0 -0.095" type="sphere"/>
                   </body>
