@@ -140,7 +140,7 @@ class SimAgent(SimObject):
 SAI = TypeVar('SAI', bound=PSimActionInterface)
 
 
-class TypedSimAgent(SimAgent, Generic[SAI], ABC):
+class TypedSimAgent(SimAgent, ABC, Generic[SAI]):
     """Simulation agent with generic action type."""
 
     def __init__(self, agent_id: AgentID, team_name: str, spec: Any) -> None:
