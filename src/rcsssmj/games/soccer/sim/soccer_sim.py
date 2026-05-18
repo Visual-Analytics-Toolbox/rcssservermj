@@ -694,6 +694,11 @@ class SoccerSimulation(BaseSimulation):
 
         self.referee.kick_off(team_side)
 
+    def request_reset_game(self) -> None:
+        """Reset the game state to BeforeKickOff and place ball at center."""
+        self.game_state.reset()
+        self.ball.place_at((0.0, 0.0, 0.2), vel=(0.0, 0.0, 0.0))
+
     def request_drop_ball(self, pos: tuple[float, float] | None = None) -> None:
         """Drop the ball at the specified position and instruct the normal progressing of the game.
 

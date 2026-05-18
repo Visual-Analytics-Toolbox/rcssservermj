@@ -6,7 +6,7 @@ from typing import Any
 import glfw
 import mujoco
 
-from rcsssmj.games.soccer.sim.soccer_commands import DropBallCommand, KickOffCommand
+from rcsssmj.games.soccer.sim.soccer_commands import DropBallCommand, KickOffCommand, ResetGameCommand
 from rcsssmj.games.soccer.sim.soccer_state_info import SoccerEnvironmentInformation, SoccerGameInformation
 from rcsssmj.server.remote_monitor import RemoteMonitorState, SimMonitor
 from rcsssmj.sim.state_info import SceneGraph, SimStateInformation
@@ -170,6 +170,8 @@ class MujocoMonitor(SimMonitor):
             self._command_queue.put(KickOffCommand(1))
         elif key == glfw.KEY_B:
             self._command_queue.put(DropBallCommand())
+        elif key == glfw.KEY_R:
+            self._command_queue.put(ResetGameCommand())
 
     def scroll(self, window: Any, x_offset: Any, y_offset: Any) -> None:
         """Handle scroll input."""
@@ -368,6 +370,8 @@ class MujocoMonitor(SimMonitor):
         overlays[topleft][0] += 'Press J for "Kick-Off Right".\n'
         overlays[topleft][1] += '\n'
         overlays[topleft][0] += 'Press B for "Drop-Ball".\n'
+        overlays[topleft][1] += '\n'
+        overlays[topleft][0] += 'Press R to "Reset Game".\n'
         overlays[topleft][1] += '\n'
         overlays[topleft][0] += 'Press H to hide the menu.\n'
         overlays[topleft][1] += '\n'

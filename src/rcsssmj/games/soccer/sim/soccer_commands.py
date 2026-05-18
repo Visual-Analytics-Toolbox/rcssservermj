@@ -51,6 +51,17 @@ class KickOffCommand(SoccerMonitorCommand):
         # logger.info('[COMMAND] "kick-off" for team: %d', self.team_id)
 
 
+class ResetGameCommand(SoccerMonitorCommand):
+    """The reset-game command."""
+
+    def __init__(self) -> None:
+        """Construct a new reset-game command."""
+        super().__init__()
+
+    def _perform(self, sci: PSoccerSimCommandInterface) -> None:
+        sci.request_reset_game()
+
+
 class DropBallCommand(SoccerMonitorCommand):
     """The drop-ball command."""
 
