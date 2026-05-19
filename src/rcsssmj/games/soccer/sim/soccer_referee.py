@@ -299,9 +299,7 @@ class SoccerReferee:
         active_ball_contact = self.game.ball.active_contact
         body_parts = self.game.ball.active_contact_body_parts
 
-        # ==================================================
-        # If the ball is in contact with any hand or forearm
-        # =================================================
+        # Check if the ball is touching any hand or forearm
         if body_parts is not None and any('hand' in part or 'forearm' in part for part in body_parts):
             logger.info('='*20)
             logger.info('Ball is in contact with hand or forearm')
@@ -314,9 +312,7 @@ class SoccerReferee:
             is_foul = True
 
             if mj_model is not None and mj_data is not None:
-                # ================================================================================
-                # If the agent is the goalie and the ball is in its penalty area, it is not a foul
-                # ================================================================================
+                # Exception: Goalie touching the ball inside their own penalty area
                 if agent.agent_id.player_no == 1:
                     ball_x, ball_y = self.game.ball.xpos[0], self.game.ball.xpos[1]
                     if agent.agent_id.team_id == TeamSide.LEFT.value:
@@ -327,36 +323,30 @@ class SoccerReferee:
                             is_foul = False
 
                 if is_foul:
-                    # ==========================================
-                    # Collect hand geometries
-                    # ==========================================
+                    # Retrieve the touched hand/forearm geometries and their dimensions
                     hand_geoms = []
                     for part in body_parts:
-                        if 'hand' in part or 'forearm' in part:
-                            gid = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_GEOM, part)
-                            if gid >= 0:
-                                hand_pos = np.array(mj_data.geom_xpos[gid])
-                                h_len = max(mj_model.geom_size[gid][0], mj_model.geom_size[gid][1])
-                                h_rad = min(mj_model.geom_size[gid][0], mj_model.geom_size[gid][1])
-                                hand_geoms.append((hand_pos, h_len, h_rad, part))
-                    
-                    # ==========================================
-                    # Ball Touched Hand or Forearm Geometries
-                    # ==========================================
+                        gid = agent.hand_geom_ids.get(part, -1)
+                        if gid >= 0:
+                            hand_pos = np.array(mj_data.geom_xpos[gid])
+                            h_len = max(mj_model.geom_size[gid][0], mj_model.geom_size[gid][1])
+                            h_rad = min(mj_model.geom_size[gid][0], mj_model.geom_size[gid][1])
+                            hand_geoms.append((hand_pos, h_len, h_rad, part))
+                    # If valid geometries were found, check for morphological extensions
                     if hand_geoms:
 
-                        # Get Torso Position and Orientation
-                        torso_geom_id = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_GEOM, agent.agent_id.prefix + 'torso')
+                        # Retrieve the torso's bounding box and position as the reference center
+                        torso_geom_id = agent.torso_geom_id
                         if torso_geom_id >= 0:
                             torso_x_size = mj_model.geom_size[torso_geom_id][0] 
                             torso_y_size = mj_model.geom_size[torso_geom_id][1] 
                             torso_pos = np.array(mj_data.geom_xpos[torso_geom_id])
 
-                        # Find Head Position using the universal 'camera' site
+                        # Determine the top of the robot's head to calculate vertical extensions
                         head_pos = torso_pos + np.array([0.0, 0.0, 0.25]) # Fallback
                         head_top_z = head_pos[2] + 0.10 # Fallback
 
-                        camera_site_id = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_SITE, agent.agent_id.prefix + 'camera')
+                        camera_site_id = agent.camera_site_id
                         if camera_site_id >= 0:
                             head_pos = np.array(mj_data.site_xpos[camera_site_id])
                             head_top_z = head_pos[2]
@@ -366,7 +356,7 @@ class SoccerReferee:
                             geom_adr = mj_model.body_geomadr[head_body_id]
                             geom_num = mj_model.body_geomnum[head_body_id]
                             
-                            # Scan all head geometries to find the absolute top
+                            # Scan all head geometries to find the absolute highest point (Z-axis)
                             for i in range(geom_num):
                                 gid = geom_adr + i
                                 gpos = mj_data.geom_xpos[gid]
@@ -383,7 +373,7 @@ class SoccerReferee:
                         extended_y = False
                         extended_z = False
 
-                        torso_body_id = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_BODY, agent.root_body_name)
+                        torso_body_id = agent.torso_body_id
                         torso_xmat = np.array(mj_data.xmat[torso_body_id]).reshape(3, 3)
 
                         if is_fallen:
@@ -392,24 +382,19 @@ class SoccerReferee:
                             for hp, h_len, h_rad, part in hand_geoms:
                                 hand_local = torso_xmat.T @ (hp - torso_pos)
                                 
-                                # A) Global Z Axis: Hand raised in the air
-                                # The torso center height + double the robot's thickness
+                                # 1. Hand raised high in the air (Global Z)
                                 tolerancia_z_global = torso_pos[2] + (max(torso_x_size, torso_y_size) * 2)
                                 ext_z_global = hp[2] > tolerancia_z_global
                                 
-                                # Evaluate mathematically if the robot has fallen on its side.
-                                # torso_xmat[2, 1] represents how much the local Y axis (shoulder-to-shoulder) points upwards.
-                                # torso_xmat[2, 0] represents how much the local X axis (chest-to-back) points upwards.
+                                # 2. Hand stretched above the head (Local Z)
+                                # Only penalized if fallen on the side (shoulder-to-shoulder axis points up)
                                 is_fallen_on_side = abs(torso_xmat[2, 1]) > abs(torso_xmat[2, 0])
-                                
-                                # B) Torso-Head Axis (Local Z): Hand stretched above the head
-                                # Penalize ONLY if fallen on the side, according to the rule.
                                 ext_torso_head = is_fallen_on_side and (hand_local[2] > abs(head_local[2]))
                                 
-                                # Local X and Y (arms to the sides or in front of the chest)
-                                # are IGNORED as they serve as support for the robot on the ground.
+                                # Note: Arms extended to the sides or front (Local X and Y) are ignored 
+                                # since they are legitimately used for ground support when fallen.
                                 
-                                if ext_z_global: extended_y = True  # Using Y log to represent Global Z on the ground
+                                if ext_z_global: extended_y = True   # Mapped to Y log for ground Z extension
                                 if ext_torso_head: extended_z = True # Local Z (above the head)
                                 
                                 if ext_z_global or ext_torso_head:
@@ -420,9 +405,15 @@ class SoccerReferee:
 
                             for hp, h_len, h_rad, part in hand_geoms:
                                 hand_local = torso_xmat.T @ (hp - torso_pos)
-                                tolerancia_x_dinamica = torso_x_size + (h_rad * 3)
-                                tolerancia_y_dinamica = torso_y_size + (h_rad * 5)
+                                
+                                # Dynamic extension tolerance based on robot size and arm radius
+                                MAX_FRONTAL_ARM_WIDTHS = 3
+                                MAX_LATERAL_ARM_WIDTHS = 5
 
+                                tolerancia_x_dinamica = torso_x_size + (h_rad * MAX_FRONTAL_ARM_WIDTHS)
+                                tolerancia_y_dinamica = torso_y_size + (h_rad * MAX_LATERAL_ARM_WIDTHS)
+
+                                # Check extensions in the torso's local X/Y axes or above the head (Global Z)
                                 ext_x = abs(hand_local[0]) > tolerancia_x_dinamica
                                 ext_y = abs(hand_local[1]) > tolerancia_y_dinamica
                                 ext_z = hp[2] > head_top_z
