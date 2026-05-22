@@ -35,9 +35,6 @@ class PSoccerSimCommandInterface(PSimCommandInterface, Protocol):
             The team side for which to give the kick off.
         """
 
-    def request_reset_game(self) -> None:
-        """Reset the game state (playtime to 0, BeforeKickOff) and place ball at center."""
-
     def request_drop_ball(self, pos: tuple[float, float] | None = None) -> None:
         """Drop the ball at the specified position and instruct the normal progressing of the game.
 
