@@ -3,7 +3,6 @@ from itertools import chain
 from math import pi, sqrt
 from typing import cast
 
-import mujoco
 import numpy as np
 
 from rcsssmj.games.soccer.play_mode import PlayMode
@@ -27,7 +26,7 @@ class SoccerReferee:
         """
 
         # MYPY-HACK: The game instance may initially be `None` but will be automatically injected in this case by the simulation (cast is used to silence mypy while preventing repetitive `None` checks)
-        self.game: PSoccerGame = cast(PSoccerGame, game)
+        self.game: PSoccerGame = cast('PSoccerGame', game)
         """The soccer game instance to referee."""
 
         self._did_act: bool = False
@@ -281,11 +280,11 @@ class SoccerReferee:
         # check no score rule
         if self.game.game_state.team_na_score is not None and active_ball_contact is not None and last_ball_contact is not None:
             self.game.game_state.team_na_score = None
-        
+
         # check hand touch foul
-        if self.__check_hand_foul():
+        if active_ball_contact is not None and self.__check_hand_foul():
             self.direct_free_kick(TeamSide.get_opposing_side(active_ball_contact.team_id))
-        
+
         # check double-touch rule
         if agent_na_touch_ball is not None and active_ball_contact is not None and last_ball_contact is not None:
             if agent_na_touch_ball == last_ball_contact and agent_na_touch_ball == active_ball_contact:
@@ -300,9 +299,7 @@ class SoccerReferee:
         body_parts = self.game.ball.active_contact_body_parts
 
         # Check if the ball is touching any hand or forearm
-        if body_parts is not None and any('hand' in part or 'forearm' in part for part in body_parts):
-            logger.info('='*20)
-            logger.info('Ball is in contact with hand or forearm')
+        if active_ball_contact is not None and body_parts is not None and any('hand' in part or 'forearm' in part for part in body_parts):
 
             # Exceptions
             agent = self.game.get_players(active_ball_contact.team_id)[active_ball_contact.player_no]
@@ -316,10 +313,10 @@ class SoccerReferee:
                 if agent.agent_id.player_no == 1:
                     ball_x, ball_y = self.game.ball.xpos[0], self.game.ball.xpos[1]
                     if agent.agent_id.team_id == TeamSide.LEFT.value:
-                        if self.game.field.left_penalty_area.contains(ball_x, ball_y):
+                        if self.game.field.left_penalty_area is not None and self.game.field.left_penalty_area.contains(ball_x, ball_y):
                             is_foul = False
                     elif agent.agent_id.team_id == TeamSide.RIGHT.value:
-                        if self.game.field.right_penalty_area.contains(ball_x, ball_y): 
+                        if self.game.field.right_penalty_area is not None and self.game.field.right_penalty_area.contains(ball_x, ball_y):
                             is_foul = False
 
                 if is_foul:
@@ -341,8 +338,8 @@ class SoccerReferee:
                             # Cannot reliably check extensions without a reference torso
                             return False
 
-                        torso_x_size = mj_model.geom_size[torso_geom_id][0] 
-                        torso_y_size = mj_model.geom_size[torso_geom_id][1] 
+                        torso_x_size = mj_model.geom_size[torso_geom_id][0]
+                        torso_y_size = mj_model.geom_size[torso_geom_id][1]
                         torso_pos = np.array(mj_data.geom_xpos[torso_geom_id])
 
                         # Determine the top of the robot's head to calculate vertical extensions
@@ -353,20 +350,19 @@ class SoccerReferee:
                         if camera_site_id >= 0:
                             head_pos = np.array(mj_data.site_xpos[camera_site_id])
                             head_top_z = head_pos[2]
-                            
+
                             # Find the body that owns the camera (the Head)
                             head_body_id = mj_model.site_bodyid[camera_site_id]
                             geom_adr = mj_model.body_geomadr[head_body_id]
                             geom_num = mj_model.body_geomnum[head_body_id]
-                            
+
                             # Scan all head geometries to find the absolute highest point (Z-axis)
                             for i in range(geom_num):
                                 gid = geom_adr + i
                                 gpos = mj_data.geom_xpos[gid]
                                 gsize = mj_model.geom_size[gid]
                                 top_z = gpos[2] + max(gsize)
-                                if top_z > head_top_z:
-                                    head_top_z = top_z
+                                head_top_z = max(head_top_z, top_z)
 
                         head_z = head_pos[2]
                         is_fallen = head_z < 0.45
@@ -387,22 +383,22 @@ class SoccerReferee:
 
                             for hp, h_len, h_rad, part in hand_geoms:
                                 hand_local = torso_xmat.T @ (hp - torso_pos)
-                                
+
                                 # 1. Hand raised high in the air (Global Z)
                                 tolerancia_z_global = torso_pos[2] + (max(torso_x_size, torso_y_size) * 2)
                                 ext_z_global = hp[2] > tolerancia_z_global
-                                
+
                                 # 2. Hand stretched above the head (Local Z)
                                 # Only penalized if fallen on the side (shoulder-to-shoulder axis points up)
                                 is_fallen_on_side = abs(torso_xmat[2, 1]) > abs(torso_xmat[2, 0])
                                 ext_torso_head = is_fallen_on_side and (hand_local[2] > abs(head_local[2]))
-                                
-                                # Note: Arms extended to the sides or front (Local X and Y) are ignored 
+
+                                # Note: Arms extended to the sides or front (Local X and Y) are ignored
                                 # since they are legitimately used for ground support when fallen.
-                                
+
                                 if ext_z_global: extended_y = True   # Mapped to Y log for ground Z extension
                                 if ext_torso_head: extended_z = True # Local Z (above the head)
-                                
+
                                 if ext_z_global or ext_torso_head:
                                     is_extended = True
                                     break
@@ -411,7 +407,7 @@ class SoccerReferee:
 
                             for hp, h_len, h_rad, part in hand_geoms:
                                 hand_local = torso_xmat.T @ (hp - torso_pos)
-                                
+
                                 # Dynamic extension tolerance based on robot size and arm radius
                                 MAX_FRONTAL_ARM_WIDTHS = 3
                                 MAX_LATERAL_ARM_WIDTHS = 5
@@ -423,11 +419,11 @@ class SoccerReferee:
                                 ext_x = abs(hand_local[0]) > tolerancia_x_dinamica
                                 ext_y = abs(hand_local[1]) > tolerancia_y_dinamica
                                 ext_z = hp[2] > head_top_z
-                                
+
                                 if ext_x: extended_x = True
                                 if ext_y: extended_y = True
                                 if ext_z: extended_z = True
-                                
+
                                 if ext_x or ext_y or ext_z:
                                     is_extended = True
                                     break
@@ -436,13 +432,13 @@ class SoccerReferee:
                         logger.info('Y-Axis Extension (Lateral): %s', extended_y)
                         logger.info('Z-Axis Extension (Above Head): %s', extended_z)
                         logger.info('is_extended: %s', is_extended)
-                                             
+
                         if not is_extended:
                             is_foul = False
 
             logger.info('is_foul: %s', is_foul)
             return is_foul
-            
+
         return False
 
     def _check_timeouts(self) -> None:

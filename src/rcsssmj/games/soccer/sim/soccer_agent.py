@@ -1,10 +1,11 @@
 from typing import Any, Final
 
+import mujoco
+
 from rcsssmj.games.soccer.sim.soccer_sim_interfaces import PSoccerSimActionInterface
 from rcsssmj.sim.agent_id import AgentID
 from rcsssmj.sim.sim_agent import TypedSimAgent
 from rcsssmj.utils.mjutils import quat_from_axis_angle
-import mujoco
 
 
 class SoccerAgent(TypedSimAgent[PSoccerSimActionInterface]):
