@@ -366,11 +366,7 @@ class SoccerReferee:
 
                         head_z = head_pos[2]
                         is_fallen = head_z < 0.45
-
                         is_extended = False
-                        extended_x = False
-                        extended_y = False
-                        extended_z = False
 
                         torso_body_id = agent.torso_body_id
                         if torso_body_id < 0:
@@ -396,9 +392,6 @@ class SoccerReferee:
                                 # Note: Arms extended to the sides or front (Local X and Y) are ignored
                                 # since they are legitimately used for ground support when fallen.
 
-                                if ext_z_global: extended_y = True   # Mapped to Y log for ground Z extension
-                                if ext_torso_head: extended_z = True # Local Z (above the head)
-
                                 if ext_z_global or ext_torso_head:
                                     is_extended = True
                                     break
@@ -420,23 +413,13 @@ class SoccerReferee:
                                 ext_y = abs(hand_local[1]) > tolerancia_y_dinamica
                                 ext_z = hp[2] > head_top_z
 
-                                if ext_x: extended_x = True
-                                if ext_y: extended_y = True
-                                if ext_z: extended_z = True
-
                                 if ext_x or ext_y or ext_z:
                                     is_extended = True
                                     break
 
-                        logger.info('X-Axis Extension (Front/Back): %s', extended_x)
-                        logger.info('Y-Axis Extension (Lateral): %s', extended_y)
-                        logger.info('Z-Axis Extension (Above Head): %s', extended_z)
-                        logger.info('is_extended: %s', is_extended)
-
                         if not is_extended:
                             is_foul = False
 
-            logger.info('is_foul: %s', is_foul)
             return is_foul
 
         return False
