@@ -337,10 +337,13 @@ class SoccerReferee:
 
                         # Retrieve the torso's bounding box and position as the reference center
                         torso_geom_id = agent.torso_geom_id
-                        if torso_geom_id >= 0:
-                            torso_x_size = mj_model.geom_size[torso_geom_id][0] 
-                            torso_y_size = mj_model.geom_size[torso_geom_id][1] 
-                            torso_pos = np.array(mj_data.geom_xpos[torso_geom_id])
+                        if torso_geom_id < 0:
+                            # Cannot reliably check extensions without a reference torso
+                            return False
+
+                        torso_x_size = mj_model.geom_size[torso_geom_id][0] 
+                        torso_y_size = mj_model.geom_size[torso_geom_id][1] 
+                        torso_pos = np.array(mj_data.geom_xpos[torso_geom_id])
 
                         # Determine the top of the robot's head to calculate vertical extensions
                         head_pos = torso_pos + np.array([0.0, 0.0, 0.25]) # Fallback
@@ -374,6 +377,9 @@ class SoccerReferee:
                         extended_z = False
 
                         torso_body_id = agent.torso_body_id
+                        if torso_body_id < 0:
+                            return False
+
                         torso_xmat = np.array(mj_data.xmat[torso_body_id]).reshape(3, 3)
 
                         if is_fallen:
