@@ -36,7 +36,7 @@ class RemoteAgentState(Enum):
 S = TypeVar('S', bound=BaseSimulation)
 
 
-class RemoteAgent(Generic[S], ABC):
+class RemoteAgent(ABC, Generic[S]):
     """Remote simulation agent, utilizing a message based connection to communicate with an external agent process."""
 
     def __init__(self, conn: PConnection, encoder: PerceptionEncoder) -> None:
@@ -50,6 +50,8 @@ class RemoteAgent(Generic[S], ABC):
         encoder: PerceptionEncoder
             The perception message encoder instance.
         """
+
+        super().__init__()
 
         self._state: RemoteAgentState = RemoteAgentState.INIT
         """The agent state."""
@@ -216,7 +218,7 @@ class RemoteAgent(Generic[S], ABC):
 SAI = TypeVar('SAI', bound=PSimActionInterface)
 
 
-class TypedRemoteAgent(RemoteAgent[S], Generic[S, SAI], ABC):
+class TypedRemoteAgent(RemoteAgent[S], ABC, Generic[S, SAI]):
     """Remote simulation agent with generic action type."""
 
     def __init__(self, conn: PConnection, parser: ActionParser[SAI], encoder: PerceptionEncoder) -> None:

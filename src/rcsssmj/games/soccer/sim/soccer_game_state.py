@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING
 
+from rcsssmj.games.soccer.game_phase import GamePhase
 from rcsssmj.games.soccer.play_mode import PlayMode
 from rcsssmj.games.teams import TeamSide
 
@@ -10,16 +11,37 @@ if TYPE_CHECKING:
 class GameState:
     """A game state."""
 
-    def __init__(self) -> None:
-        """Construct a new game state."""
+    def __init__(
+        self,
+        phase: GamePhase = GamePhase.FIRST_HALF,
+        play_time: float = 0.0,
+        *,
+        sim_time: float = 0.0,
+    ) -> None:
+        """Construct a new game state.
 
-        self._sim_time: float = 0.0
+        Parameter
+        ---------
+        phase: GamePhase, default=GamePhase.FIRST_HALF
+            The initial game phase (first half, second half, etc.).
+
+        play_time: float, default=0.0
+            The initial play time in seconds.
+
+        sim_time: float
+            The initial simulation time in seconds.
+        """
+
+        self._phase: GamePhase = phase
+        """The current soccer game phase (first half, second half, etc.)."""
+
+        self._sim_time: float = sim_time
         """The current simulation time in seconds."""
 
-        self._play_time_ms: int = 0
+        self._play_time_ms: int = int(play_time * 1000)
         """The current play time in milliseconds (to circumvent accumulation errors)."""
 
-        self._play_time: float = 0.0
+        self._play_time: float = play_time
         """The current play time in seconds."""
 
         self._play_mode: PlayMode = PlayMode.BEFORE_KICK_OFF
@@ -46,12 +68,26 @@ class GameState:
         self.team_na_score: TeamSide | None = None
         """The team side, which is not allowed to score a goal until another agent touches the ball again (if existing)."""
 
-    def reset(self) -> None:
-        """Reinitialize game state."""
+    def reset(
+        self,
+        phase: GamePhase = GamePhase.FIRST_HALF,
+        play_time: float = 0.0,
+    ) -> None:
+        """Reinitialize game state.
 
+        Parameter
+        ---------
+        phase: GamePhase, default=GamePhase.FIRST_HALF
+            The initial game phase (first half, second half, etc.).
+
+        play_time: float, default=0.0
+            The initial play time in seconds.
+        """
+
+        self._phase = phase
         self._sim_time = 0.0
-        self._play_time_ms = 0
-        self._play_time = 0.0
+        self._play_time_ms = int(play_time * 1000)
+        self._play_time = play_time
         self._play_mode = PlayMode.BEFORE_KICK_OFF
         self._play_mode_history = {pm: 0.0 for pm in PlayMode}
 
@@ -61,6 +97,36 @@ class GameState:
         self.left_team_score = 0
         self.right_team_score = 0
 
+        self.agent_na_touch_ball = None
+        self.team_na_score = None
+
+    @property
+    def phase(self) -> GamePhase:
+        """The current game phase (first half, second half, etc.)."""
+
+        return self._phase
+
+    def switch_phase(self, phase: GamePhase, play_time: float) -> None:
+        """Switch the current game phase and set the corresponding play time.
+
+        Parameter
+        ---------
+        phase: GamePhase
+            The new game phase.
+
+        play_time: float
+            The initial play time for the given game phase.
+        """
+
+        self._phase = phase
+        self._play_time_ms = int(play_time * 1000)
+        self._play_time = play_time
+
+        # reset play mode and clear play mode history
+        self._play_mode = PlayMode.BEFORE_KICK_OFF
+        self._play_mode_history = {pm: 0.0 for pm in PlayMode}
+
+        # reset "not-allowed" flags
         self.agent_na_touch_ball = None
         self.team_na_score = None
 
@@ -109,6 +175,12 @@ class GameState:
             return 0
 
         return self.left_team_score if side == TeamSide.LEFT else self.right_team_score
+
+    @property
+    def is_draw(self) -> bool:
+        """Check if scores are equal."""
+
+        return self.left_team_score == self.right_team_score
 
     def get_play_mode_time(self, play_mode: PlayMode | None = None) -> float:
         """Return the play time given play mode has last been activated.

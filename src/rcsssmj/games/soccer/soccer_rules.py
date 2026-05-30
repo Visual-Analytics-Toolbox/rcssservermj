@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 from enum import Enum
 
+from rcsssmj.games.soccer.game_phase import GamePhase
 from rcsssmj.games.soccer.soccer_fields import SoccerFieldVersions
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,9 @@ class SoccerRules:
     extra_half_time: int = 15 * 60  # officially 15min per extra half
     """The duration (in seconds) of an extra half."""
 
+    penalty_shooting_time: int = 60  # unofficial - 60 seconds per penalty kick
+    """The duration (in seconds) of a penalty kick / shooting."""
+
     kick_off_time: int = 15  # unofficial - use negative values for disabling
     """The time (in seconds) the kick-off team has exclusive access to the ball."""
 
@@ -89,11 +93,54 @@ class SoccerRules:
     goal_pause_time: int = 3  # unofficial
     """The time (in seconds) to "pause" the game after a goal before switching to kick-off play mode for the opposite team."""
 
-    throwin_wait_time: int = 1  # unofficial
+    throw_in_wait_time: int = 1  # unofficial
     """The time (in seconds) to referee will wait after the ball left the field before switching to throw-in play mode."""
 
     default_field_version: SoccerFieldVersions = SoccerFieldVersions.FIFA  # official
     """The default field version to use with the rule book."""
+
+    def get_start_time_for(self, phase: GamePhase) -> float:
+        """Retrieve the start time for the given game phase.
+
+        Parameter
+        ---------
+        phase: GamePhase
+            The game phase for which to retrieve the start time.
+        """
+
+        if phase == GamePhase.SECOND_HALF:
+            return self.half_time
+
+        if phase == GamePhase.FIRST_EXTRA_HALF:
+            return 2 * self.half_time
+
+        if phase == GamePhase.SECOND_EXTRA_HALF:
+            return 2 * self.half_time + self.extra_half_time
+
+        return 0.0  # FIRST_HALF or PENALTY_SHOOTING
+
+    def get_end_time_for(self, phase: GamePhase) -> float:
+        """Retrieve the end time for the given game phase.
+
+        Parameter
+        ---------
+        phase: GamePhase
+            The game phase for which to retrieve the end time.
+        """
+
+        if phase == GamePhase.FIRST_HALF:
+            return self.half_time
+
+        if phase == GamePhase.SECOND_HALF:
+            return 2 * self.half_time
+
+        if phase == GamePhase.FIRST_EXTRA_HALF:
+            return 2 * self.half_time + self.extra_half_time
+
+        if phase == GamePhase.SECOND_EXTRA_HALF:
+            return 2 * (self.half_time + self.extra_half_time)
+
+        return self.penalty_shooting_time  # PENALTY_SHOOTING
 
 
 @dataclass(frozen=True)

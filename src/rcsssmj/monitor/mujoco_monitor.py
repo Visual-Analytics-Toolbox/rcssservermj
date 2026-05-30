@@ -392,7 +392,7 @@ class MujocoMonitor(SimMonitor):
         if self.camera_mode_target == 'follow' and self.camera_mode != 'follow':
             self.camera.fixedcamid = -1
             self.camera.type = mujoco.mjtCamera.mjCAMERA_TRACKING
-            self.camera.trackbodyid = 0
+            self.camera.trackbodyid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, 'ball')
             self.camera.distance = 3.5
             self.camera.elevation = 0.0
             self.camera.azimuth = 90.0

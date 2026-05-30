@@ -6,7 +6,9 @@ from math import degrees, pi
 from typing import Any, Final
 
 import mujoco
+import numpy as np
 
+from rcsssmj.games.soccer.game_phase import GamePhase
 from rcsssmj.games.soccer.sim.soccer_agent import SoccerAgent
 from rcsssmj.games.soccer.sim.soccer_ball import SoccerBall
 from rcsssmj.games.soccer.sim.soccer_game_state import GameState
@@ -23,6 +25,7 @@ from rcsssmj.sim.perceptions import Perception
 from rcsssmj.sim.sim_object import SimObject
 from rcsssmj.sim.simulation import BaseSimulation
 from rcsssmj.sim.state_info import SimStateInformation
+from rcsssmj.utils.jersey import render_jersey_texture
 from rcsssmj.utils.mjutils import quat_from_axis_angle
 
 logger = logging.getLogger(__name__)
@@ -36,6 +39,9 @@ class SoccerSimulation(BaseSimulation):
         field: SoccerField,
         rules: SoccerRules | None = None,
         referee: SoccerReferee | None = None,
+        *,
+        initial_game_phase: GamePhase = GamePhase.FIRST_HALF,
+        initial_play_time: float | None = None,
     ) -> None:
         """Construct a new simulation sever.
 
@@ -49,6 +55,12 @@ class SoccerSimulation(BaseSimulation):
 
         referee: SoccerReferee | None, default=None
             The soccer referee managing the game aspect of the simulation.
+
+        initial_game_phase: GamePhase, default=GamePhase.FIRST_HALF
+            The initial game phase.
+
+        initial_play_time: float | None, default=None
+            The initial play time or ``None`` for game phase related start time.
         """
 
         super().__init__(vision_interval=2)
@@ -62,7 +74,10 @@ class SoccerSimulation(BaseSimulation):
         self.referee: Final[SoccerReferee] = SoccerReferee() if referee is None else referee
         """The game referee responsible for managing the soccer game aspect of the simulation."""
 
-        self.game_state: Final[GameState] = GameState()
+        # determine initial play time
+        play_time = initial_play_time if initial_play_time is not None else self.rules.get_start_time_for(initial_game_phase)
+
+        self.game_state: Final[GameState] = GameState(initial_game_phase, play_time)
         """The current soccer game state."""
 
         self.ball: Final[SoccerBall] = SoccerBall()
@@ -115,22 +130,14 @@ class SoccerSimulation(BaseSimulation):
         if not super().init():
             return False
 
-        # reset soccer simulation states
-        self.game_state.reset()
-        self._team_players[TeamSide.LEFT.value].clear()
-        self._team_players[TeamSide.RIGHT.value].clear()
-
         # initialize ball
         self.ball.init(self._mj_spec, self._mj_model, self._mj_data)
-
-        # initialize referee
-        self.referee.reset()
 
         return True
 
     def _create_world(self) -> Any | None:
         # load world specification
-        world_spec = self.spec_provider.load_environment('soccer')
+        world_spec = self.spec_provider.load_environment_spec('soccer', 'world')
         if world_spec is None:
             return None
 
@@ -425,7 +432,7 @@ class SoccerSimulation(BaseSimulation):
         """
 
         # try to load the robot model requested by the agent
-        robot_spec = self.spec_provider.load_robot(params.model_name)
+        robot_spec = self.spec_provider.load_robot_spec(params.model_name)
         if robot_spec is None:
             # failed to load the requested model --> report failure
             return None
@@ -462,7 +469,11 @@ class SoccerSimulation(BaseSimulation):
         self._team_players[team_id][params.player_no] = player
 
         # set team color and spawn position
-        robot_spec.material('team').rgba = [0, 0, 1, 1] if team_id == TeamSide.LEFT.value else [1, 0, 0, 1]
+        team_rgba = [0, 0, 1, 1] if team_id == TeamSide.LEFT.value else [1, 0, 0, 1]
+        robot_spec.material('team').rgba = team_rgba
+
+        # add a jersey number badge if the robot model has a 'jersey' placeholder site
+        self._apply_jersey_number(robot_spec, params.player_no, team_rgba)
 
         x_sign = -1 if agent_id.team_id == TeamSide.LEFT.value else 1
         root_body = robot_spec.body('torso')
@@ -479,6 +490,87 @@ class SoccerSimulation(BaseSimulation):
         logger.info('Player %s #%d joined the game.', params.team_name, params.player_no)
 
         return player
+
+    def _apply_jersey_number(self, robot_spec: Any, player_no: int, team_rgba: Sequence[float]) -> None:
+        """Add jersey number badges to the given robot spec.
+
+        For every placeholder ``site`` on the robot whose name starts with
+        ``jersey`` (e.g. ``jersey``, ``jersey-front``), this method generates
+        a player number texture, registers a corresponding material, and
+        replaces the site with a thin textured box geom at the same pose.
+        Robots that do not declare any ``jersey`` site are left untouched.
+
+        Parameter
+        ---------
+        robot_spec: Any
+            The MuJoCo model specification of the robot (already team-colored).
+
+        player_no: int
+            The player number to render onto the jersey.
+
+        team_rgba: Sequence[float]
+            The team color as ``[r, g, b, a]`` in 0-1 range, used as the
+            background of the jersey badge.
+        """
+
+        # locate placeholder sites (skip silently if the robot has none)
+        jersey_sites = [s for s in robot_spec.sites if s.name == 'jersey' or s.name.startswith('jersey-')]
+        if not jersey_sites:
+            return
+
+        # render texture: digits on team-colored background
+        bg_rgb = (
+            int(round(team_rgba[0] * 255)),
+            int(round(team_rgba[1] * 255)),
+            int(round(team_rgba[2] * 255)),
+        )
+        # pick a fg color with reasonable contrast against the team color
+        luminance = 0.2126 * bg_rgb[0] + 0.7152 * bg_rgb[1] + 0.0722 * bg_rgb[2]
+        fg_rgb = (0, 0, 0) if luminance > 140 else (255, 255, 255)
+
+        tex_w = tex_h = 128
+        tex_data = render_jersey_texture(player_no, fg_rgb=fg_rgb, bg_rgb=bg_rgb, width=tex_w, height=tex_h)
+        img = np.frombuffer(tex_data, dtype=np.uint8).reshape(tex_h, tex_w, 3)
+        rotated_bytes = np.rot90(img, k=-1).copy().tobytes()
+        # Replicate the image on all 6 cube faces (stacked vertically: data is 6*H rows tall)
+        cube_data = rotated_bytes * 6
+
+        # register texture and material on the robot spec
+        tex = robot_spec.add_texture()
+        tex.name = 'jersey_tex'
+        tex.type = mujoco.mjtTexture.mjTEXTURE_CUBE
+        tex.nchannel = 3
+        tex.width = tex_w
+        tex.height = tex_h * 6
+        tex.data = cube_data
+
+        mat = robot_spec.add_material()
+        mat.name = 'jersey_mat'
+        mat.textures[mujoco.mjtTextureRole.mjTEXROLE_RGB] = 'jersey_tex'
+        try:
+            team_mat = robot_spec.material('team')
+            mat.specular = team_mat.specular
+            mat.shininess = team_mat.shininess
+            mat.reflectance = team_mat.reflectance
+            mat.emission = team_mat.emission
+        except (KeyError, ValueError):
+            pass
+
+        # add a thin textured box geom on the torso at each placeholder pose
+        torso = robot_spec.body('torso')
+        for site in jersey_sites:
+            geom = torso.add_geom()
+            geom.name = site.name
+            geom.type = mujoco.mjtGeom.mjGEOM_BOX
+            geom.pos = site.pos
+            geom.quat = site.quat
+            geom.size = site.size
+            geom.material = 'jersey_mat'
+            geom.contype = 0
+            geom.conaffinity = 0
+            geom.group = 2
+            # remove the placeholder site
+            robot_spec.delete(site)
 
     def remove_players(self, players: Sequence[SoccerAgent]) -> None:
         """Remove the given list of players.

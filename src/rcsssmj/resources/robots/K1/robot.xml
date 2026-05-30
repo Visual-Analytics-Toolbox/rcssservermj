@@ -71,6 +71,8 @@
     <body name="torso" pos="0 0 1.0">
       <site name='torso' pos='0.0 0.0 0.0' />
       <!-- <site name="torso-vismarker" pos="0 0 0"/> -->
+      <site name="jersey" pos="-0.065 0 0.1" size="0.005 0.05 0.07" type="box" group="3"/>
+      <site name="jersey-front" pos="0.071 0 0.08" quat="0 0.99985 0 -0.01745" size="0.005 0.05 0.07" type="box" group="3"/>
       <inertial pos="-0.0043392 -0.00065534 0.065686" quat="0.999896 -0.00411546 0.0137413 -0.00168959" mass="6.5" diaginertia="0.0962166 0.0895166 0.0201248"/>
       <freejoint name="root"/>
       <geom class="visual" material="team" mesh="Trunk"/>
