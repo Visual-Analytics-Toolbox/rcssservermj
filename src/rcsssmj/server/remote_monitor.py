@@ -8,7 +8,7 @@ from threading import Thread, current_thread
 from rcsssmj.server.command_parser import CommandParser
 from rcsssmj.server.communication.connection import PConnection
 from rcsssmj.sim.commands import MonitorCommand
-from rcsssmj.sim.state_info import SimStateInformation
+from rcsssmj.sim.state_info import SceneGraph, SimStateInformation, TransformNode
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ class SimMonitor(ABC):
         """Wait until the monitor listener thread terminates (if existing)."""
 
     @abstractmethod
-    def update(self, state_info: Sequence[SimStateInformation], frame_id: int) -> None:
+    def update(self, state_info: Sequence[SimStateInformation], frame_id: int, did_recompile: bool) -> None:
         """Update the monitor state.
 
         Parameter
@@ -71,13 +71,16 @@ class SimMonitor(ABC):
 
         frame_id: int
             The current simulation frame id.
+
+        did_recompile: int
+            If a model recompilation happend since the last update.
         """
 
 
 class RemoteMonitor(SimMonitor):
     """Remote simulation monitor, utilizing a message based connection to communicate with an external monitor process."""
 
-    def __init__(self, conn: PConnection, parser: CommandParser) -> None:
+    def __init__(self, conn: PConnection, parser: CommandParser, update_interval: int = 1) -> None:
         """Construct a new remote simulation monitor client.
 
         Parameter
@@ -87,9 +90,12 @@ class RemoteMonitor(SimMonitor):
 
         parser: CommandParser
             The monitor command parser instance.
+
+        update_interval: int
+            The update interval of the monitor.
         """
 
-        super().__init__()
+        super().__init__(update_interval=update_interval)
 
         self._conn: PConnection = conn
         """The monitor connection for exchanging state and command messages."""
@@ -100,6 +106,15 @@ class RemoteMonitor(SimMonitor):
         self._monitor_thread: Thread | None = None
         """The thread, running the monitor receive loop (if existing)."""
 
+        self._last_full_state_frame_id: int = -250
+        """The frame id when a full state was sent last."""
+
+        self._node_cache: TransformNode = TransformNode()
+        """The transform node cache."""
+
+        self._did_recompile: bool = False
+        """If the model was recompiled since the last update."""
+
     def shutdown(self) -> None:
         self._conn.shutdown()
 
@@ -107,9 +122,30 @@ class RemoteMonitor(SimMonitor):
         if self._monitor_thread is not None:
             self._monitor_thread.join()
 
-    def update(self, state_info: Sequence[SimStateInformation], frame_id: int) -> None:
-        # TODO: Send simulation state message to monitor
-        pass
+    def update(self, state_info: Sequence[SimStateInformation], frame_id: int, did_recompile: bool) -> None:
+        self._did_recompile |= did_recompile
+        if frame_id % self.update_interval != 0:
+            return
+
+        full = self._did_recompile or not (0 <= frame_id - self._last_full_state_frame_id < 250)
+        if full:
+            self._node_cache.reset()
+
+        # RSMP: Robot Simulation Monitor Protocol
+        # Major and minor version number of the protocol follows.
+        # The sub components are versioned separately.
+        # If just the inner structure of a sub component changed, the RSMP version number does not need to change.
+        msg = "((RSMP 1 0)"
+        for si in state_info:
+            if isinstance(si, SceneGraph):
+                msg += si.to_sexp(full, node_cache=self._node_cache)
+            else:
+                msg += si.to_sexp(full)
+        msg += ")"
+        self._conn.send_message(msg.encode('utf-8'))
+        if full:
+            self._last_full_state_frame_id = frame_id
+        self._did_recompile = False
 
     def run(self) -> None:
         """Continuously receive and process monitor commands.
