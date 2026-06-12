@@ -5,15 +5,21 @@ Ant Robot
 
 The `ant <https://gymnasium.farama.org/environments/mujoco/ant/>`_ robot is a simple model for testing from the `Gymnasium <https://github.com/Farama-Foundation/Gymnasium>`_ project.
 
-+--------------------+--------------------------------------------------------------+
-| Model Properties                                                                  |
-+====================+==============================================================+
-| **Name / ID**      | 'ant'                                                        |
-+--------------------+--------------------------------------------------------------+
-| **Type / Anatomy** | 4-legged robot                                               |
-+--------------------+--------------------------------------------------------------+
-| **DoF**            | 8 |ndash| 2 per leg                                          |
-+--------------------+--------------------------------------------------------------+
+
+.. _robot-model_ant-properties:
+
+Model Properties
+----------------
+
++----------------+---------------------+
+| Property       | Value               |
++================+=====================+
+| Name / ID      | ``ant``             |
++----------------+---------------------+
+| Type / Anatomy | 4-legged robot      |
++----------------+---------------------+
+| DoF            | 8 |ndash| 2 per leg |
++----------------+---------------------+
 
 
 .. _robot-model_ant-joints:
@@ -46,6 +52,7 @@ The Ant robot is equipped with the following joints:
 State information for the above joints is received via a :ref:`Joint State Perceptor <agent-protocol_joint-state-perceptor>`.
 
 Joint actions are performed using :ref:`Motor Effectors <agent-protocol_motor-effector>` for the respective joints.
+
 
 .. _robot-model_ant-sensors:
 

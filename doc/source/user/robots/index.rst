@@ -23,3 +23,4 @@ Each robot model is organized in a separate subdirectory named after the model.
 
     T1 <T1>
     K1 <K1>
+    PiPlus <PiPlus>

@@ -9,15 +9,25 @@ It features 6 DoF per leg, 4 per arm and two for the head.
 The K1 robot model used in the simulation is based on the official model files from Booster.
 As a result, motions developed for the real robot should also work within the simulation and - with a bit of luck - vice versa.
 
-+--------------------+----------------------------------------------+
-| Model Properties                                                  |
-+====================+==============================================+
-| **Name / ID**      | 'K1'                                         |
-+--------------------+----------------------------------------------+
-| **Type / Anatomy** | Humanoid Robot                               |
-+--------------------+----------------------------------------------+
-| **DoF**            | 22 |mdash| 6 per leg, 4 per arm, 2 in neck   |
-+--------------------+----------------------------------------------+
+
+.. _robot-model_k1-properties:
+
+Model Properties
+----------------
+
++----------------+--------------------------------------------+
+| Property       | Value                                      |
++================+============================================+
+| Name / ID      | ``K1``                                     |
++----------------+--------------------------------------------+
+| Type / Anatomy | Humanoid Robot                             |
++----------------+--------------------------------------------+
+| Height         | 0.95 m                                     |
++----------------+--------------------------------------------+
+| Weight         | 19.5 kg                                    |
++----------------+--------------------------------------------+
+| DoF            | 22 |mdash| 6 per leg, 4 per arm, 2 in head |
++----------------+--------------------------------------------+
 
 
 .. _robot-model_k1-joints:

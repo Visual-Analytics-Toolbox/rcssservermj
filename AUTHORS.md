@@ -12,3 +12,5 @@ Special thanks to the following individuals, that contributed to the project:
 
 - __Klaus Dorer__
 - __Caio Lucena__
+- __Yiran Wang__
+- __Zirui Zou__

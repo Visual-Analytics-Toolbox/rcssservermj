@@ -73,4 +73,8 @@ rst_prolog = f"""
 
    <br />
 
+.. |clearfloat|  raw:: html
+
+    <div class="clearer"></div>
+
 """

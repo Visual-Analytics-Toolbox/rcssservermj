@@ -48,6 +48,7 @@ Please use GitLab [Issues](https://gitlab.com/robocup-sim/rcssservermj/-/issues)
 - Ant robot XML taken from [gymnasium](https://github.com/Farama-Foundation/Gymnasium/blob/main/gymnasium/envs/mujoco/assets/ant.xml) (MIT License)
 - T1 robot XML and assets adapted / taken from [booster_gym](https://github.com/BoosterRobotics/booster_gym/blob/main/resources/T1/T1_serial.xml) (Apache 2.0 License)
 - K1 robot XML and assets adapted / taken from [booster_assets](https://github.com/BoosterRobotics/booster_assets/blob/main/robots/K1/K1_22dof.xml) (BSD 3-Clause License)
+- PiPlus robot XML and assets based on [HT_URDF](https://github.com/HighTorque-Robotics/HT_URDF) (BSD 3-Clause License)
 
 ## License and Disclaimer
 
