@@ -16,6 +16,10 @@ The package documentation and user guide can be found at: [robocup-sim.gitlab.io
 uv sync
 ```
 
+docker run -p 60000:60000 -p 60001:60001 sim:latest
+
+----
+
 ## Instructions
 
 Start the soccer simulation server:
