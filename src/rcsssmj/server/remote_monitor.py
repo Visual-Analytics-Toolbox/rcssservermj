@@ -9,6 +9,7 @@ from rcsssmj.server.command_parser import CommandParser
 from rcsssmj.server.communication.connection import PConnection
 from rcsssmj.sim.commands import MonitorCommand
 from rcsssmj.sim.state_info import SimStateInformation
+from rcsssmj.games.soccer.sim.soccer_state_info import SoccerEnvironmentInformation, SoccerGameInformation
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +110,17 @@ class RemoteMonitor(SimMonitor):
 
     def update(self, state_info: Sequence[SimStateInformation], frame_id: int) -> None:
         # TODO: Send simulation state message to monitor
-        pass
+        for info in state_info:
+            print(type(info))
+            if isinstance(info, SoccerEnvironmentInformation):
+                # process environment information
+                pass
+
+            elif isinstance(info, SoccerGameInformation):
+                # buffer soccer game state information
+                #self.game_state = info
+                #print(info)
+                pass
 
     def run(self) -> None:
         """Continuously receive and process monitor commands.
