@@ -12,13 +12,9 @@ The package documentation and user guide can be found at: [robocup-sim.gitlab.io
 
 ## Installation
 
-The simulation server (**rcsssmj** package) can be installed from [PyPI](https://pypi.org/project/rcsssmj/) via:
-
-```bash
-pip install rcsssmj
 ```
-
-For more detailed installation instructions (virtual environments, installation from source, development setup, etc.) please refer to the [Installation](https://robocup-sim.gitlab.io/rcssservermj/user/installation.html) chapter of the [User Guide](https://robocup-sim.gitlab.io/rcssservermj/user/index.html).
+uv sync
+```
 
 ## Instructions
 
