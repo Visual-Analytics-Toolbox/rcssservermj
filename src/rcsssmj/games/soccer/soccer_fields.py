@@ -21,6 +21,9 @@ class SoccerFieldVersions(Enum):
     FIFA_7_VS_7 = 'fifa7vs7'
     """Official FIFA 7 vs 7 soccer field."""
 
+    HSL_2026_MID = 'hsl2026'
+    """Official HSL Field size for middle division."""
+
     @staticmethod
     def from_value(version: str) -> SoccerFieldVersions:
         """Fetch the enum entry corresponding to the given version value."""
@@ -41,7 +44,8 @@ def create_soccer_field(version: str) -> SoccerField:
 
     if version_id == SoccerFieldVersions.FIFA_7_VS_7:
         return FIFA7vs7SoccerField()
-
+    elif version_id == SoccerFieldVersions.HSL_2026_MID:
+        return HSLMiddleSoccerField()
     # cases: FIFA and UNKNOWN
     return FIFASoccerField()
 
@@ -192,4 +196,23 @@ class FIFA7vs7SoccerField(SoccerField):
             corner_area_radius=1,  # not sure if used
             penalty_spot_distance=7.32,  # official penalty spot
             center_circle_radius=5.5,  # official radius
+        )
+
+class HSLMiddleSoccerField(SoccerField):
+    """Official HSL soccer field specification for middle division"""
+
+    def __init__(self) -> None:
+        """Construct a new HSL Middle division soccer field."""
+        print("hsl")
+        super().__init__(
+            field_dim=(14,9, 40),  # official  7vs7 measures - z height is arbitrary
+            line_width=0.05,  # officially max width of 12cm, but at least the goal line has to match the diameter of the goal posts
+            field_border=2.0,
+            goal_dim=(1, 3.66, 1.83),  # could not find official specification of depth (x dimensions)
+            goal_post_radius=0.05,  # officially max diameter of 12cm, but has to be the same as the goal line width
+            goalie_area_dim=(0.95, 4),  # adjusted from official penalty area size
+            penalty_area_dim=(2.95, 6),  # official size
+            corner_area_radius=1,  # not sure if used
+            penalty_spot_distance=3,  # official penalty spot # FIXME
+            center_circle_radius=3,  # official radius
         )
