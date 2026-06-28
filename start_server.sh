@@ -1,1 +1,1 @@
-uv run rcssservermj --host 127.0.0.1 --aport 60000 --mport 60001 --field hsl2026
+uv run rcssservermj --host 127.0.0.1 --aport 60000 --mport 60001 #--field hsl2026
